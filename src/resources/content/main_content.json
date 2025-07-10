@@ -1,0 +1,14 @@
+{
+    "title": "Welcome to the ESAT Application!",
+    "description": "The EPAs Environmental Source Apportionment Toolkit (ESAT) project provides an open-source python package with which source apportionment workflows can be programmatically created and run. The features available in the ESAT package include data preprocessing and cleaning, non-negative matrix factorization (NMF) algorithms (currently two options are available), solution analytics and visualizations, error estimation methods, and customized constrained factorization models.",
+    "links": [
+        {
+            "text": "GitHub Repository",
+            "url": "https://www.github.com/quanted/esat"
+        },
+        {
+            "text": "Documentation",
+            "url": "https://quanted.github.io/esat/"
+        }
+    ]
+}

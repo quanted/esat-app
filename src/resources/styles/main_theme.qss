@@ -1,0 +1,60 @@
+/* Main Theme Stylesheet */
+
+/* Sidebar Navigation Styles */
+#SidebarNav {
+    background: #23272e;
+    border: none;
+}
+#SidebarNav:focus {
+    outline: none;
+}
+#SidebarNav::item {
+    background: #23272e;
+    color: white;
+    padding: 0px;
+    margin: 0px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+#SidebarNav::item:focus {
+    outline: none;
+    margin: 0px;
+    padding: 0px;
+    border-radius: 4px;
+}
+#SidebarNav::item:selected {
+    background: #3a6ea5;
+    outline: none;
+    color: white;
+    padding: 0px;
+    margin: 0px;
+}
+#SidebarNav::item:hover {
+    background: #27496d;
+    padding: 0px;
+}
+#SidebarNav::item:selected:focus {
+    outline: none;
+}
+
+/* Menu Icon Item Styles */
+QPushButton#MenuIconButton {
+    background: transparent;
+    border: none;
+    padding: 5px;
+    margin: 2px;
+}
+
+QPushButton#MenuIconButton:hover {
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    padding: 5px;
+}
+
+/* Table Styles */
+QTableWidget::item:selected {
+    background-color: #0078d7;  /* Windows blue */
+    color: white;
+}
+
+/* Tab Styles */
