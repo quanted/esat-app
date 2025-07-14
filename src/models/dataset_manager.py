@@ -44,6 +44,7 @@ class DatasetManager(QObject):
 
         self.loaded_datasets = {}
         self.dataset_feature_categories = {}  # Track feature categories for each dataset
+        self.locations = {}
 
         self.threads = {}
         self.workers = {}
@@ -316,3 +317,18 @@ class DatasetManager(QObject):
 
     def on_ridgeline_error(self, name, error):
         logger.error(f"Ridgeline plot error for {name}: {error}")
+
+    def preprocess_dataset(self, dataset_name: str):
+        if dataset_name not in self.loaded_datasets:
+            if VERBOSE:
+                logger.warning(f"Dataset {dataset_name} not loaded")
+            return None, None
+        dataset = self.loaded_datasets[dataset_name]
+        if VERBOSE:
+            logger.info(f"Preprocessing dataset {dataset_name}")
+        for feature, category in self.dataset_feature_categories.get(dataset_name, {}).items():
+            dataset.set_category(feature, category)
+        # Implement additional preprocessing steps here as needed
+        if VERBOSE:
+            logger.info(f"Preprocessing completed for dataset {dataset_name}")
+        return dataset.get_data()

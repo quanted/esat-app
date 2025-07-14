@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QGuiApplication
 from PySide6.QtCore import Qt, QSize
 
-from src.controllers import ProjectController, DataController
+from src.controllers import ProjectController, DataController, ModelController
 
 
 class CustomMenuBar(QMenuBar):
@@ -90,7 +90,7 @@ class MainView(QMainWindow):
         self.sidebar_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         nav_items = [
-            "Home", "Project", "Data", "Workflows", "Models", "Error", "Docs", "Settings"
+            "Home", "Project", "Data", "Models", "Workflows", "Error", "Docs", "Settings"
         ]
         for item in nav_items:
             icon_path = os.path.join(self.icons_path, f"{item.lower()}-white.svg")
@@ -133,12 +133,14 @@ class MainView(QMainWindow):
 
     def handle_navbar_click(self, item):
         tooltip = item.toolTip()
-        if tooltip == "Project":
-            self.main_controller.project_controller.show_project_view()
-        elif tooltip == "Home":
+        if tooltip == "Home":
             self.load_main_content()
+        elif tooltip == "Project":
+            self.main_controller.project_controller.show_project_view()
         elif tooltip == "Data":
             self.main_controller.data_controller.show_data_view()
+        elif tooltip == "Models":
+            self.main_controller.model_controller.show_data_view()
 
     def load_main_content(self):
         content_path = os.path.join("src", "resources", "content")

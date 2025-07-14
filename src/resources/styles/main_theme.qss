@@ -57,4 +57,6 @@ QTableWidget::item:selected {
     color: white;
 }
 
+/* Tooltip Styles */
+
 /* Tab Styles */

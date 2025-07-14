@@ -10,7 +10,9 @@ from PySide6.QtWidgets import (
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from PySide6.QtGui import QMovie
-from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtCore import Qt, QSize, QTimer, QPoint
+
+from src.widgets.dataset_selection_widget import DatasetSelectionWidget
 
 
 class DataView(QWidget):
@@ -23,6 +25,10 @@ class DataView(QWidget):
         if webviews is None or len(webviews) < 6:
             raise ValueError("Expected 6 pre-initialized QWebEngineView instances in webviews")
         self.webviews = webviews
+
+        # Initialize plot figure attributes
+        self.scatter_fig = None
+        self.ts_fig = None
 
         self.scatter_view = self.webviews[0]
         self.ts_view = self.webviews[1]
@@ -38,8 +44,6 @@ class DataView(QWidget):
         self.compare1_plot_timer.setInterval(150)  # 150 ms debounce
         self.compare1_plot_timer.timeout.connect(self._do_update_compare1_plot)
 
-        self.selected_dataset = None
-        self.dataset_details_labels = {}
         self.selected_feature = None
         self.dataset_metrics = []
         self.plotted_row = None
@@ -54,7 +58,6 @@ class DataView(QWidget):
         self._setup_stacked_layouts()
         self._setup_ui()
 
-        QTimer.singleShot(0, self.update_dataset_dropdown)
         self._connect_signals()
 
     def _setup_loading_overlays(self):
@@ -100,12 +103,12 @@ class DataView(QWidget):
     def _setup_stacked_layouts(self):
         self.scatter_stack = QStackedLayout()
         self.scatter_stack.addWidget(self.scatter_view)
-        self.scatter_stack.addWidget(self.scatter_loader_container)
+        self.scatter_stack.addWidget(self._clone_loader(self.scatter_loader_container))
         self.scatter_stack.setCurrentIndex(0)
 
         self.ts_stack = QStackedLayout()
         self.ts_stack.addWidget(self.ts_view)
-        self.ts_stack.addWidget(self.ts_loader_container)
+        self.ts_stack.addWidget(self._clone_loader(self.ts_loader_container))
         self.ts_stack.setCurrentIndex(0)
 
     def _setup_stats_table(self):
@@ -129,8 +132,6 @@ class DataView(QWidget):
         self.tabs.addTab(self._create_impute_tab(), "Impute")
         self.tabs.addTab(self._create_outliers_tab(), "Outliers")
         self.tabs.addTab(self._create_simulate_tab(), "Simulate")
-        # self.tabs.addTab(self._create_spatial_tab(), "Spatial Analysis")
-        # self.tabs.addTab(self._create_temporal_tab(), "Temporal Analysis")
         main_layout.addWidget(self.tabs, stretch=3)
 
         # --- Right: Controls section ---
@@ -139,30 +140,19 @@ class DataView(QWidget):
         right_panel.setFixedWidth(220)
         right_layout = QVBoxLayout(right_panel)
         right_layout.setAlignment(Qt.AlignTop)
-        right_layout.addWidget(QLabel("Select Dataset:"))
-        self.dataset_dropdown = QComboBox()
-        self.details_group = QGroupBox("Dataset Details")
-        self.details_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        details_layout = QVBoxLayout(self.details_group)
-        for key in ["Files", "Samples", "Features", "Date/Index Range", "Location"]:
-            label = QLabel(f"{key}:")
-            font = label.font()
-            font.setBold(True)
-            font.setPointSize(10)
-            label.setFont(font)
-            value = QLabel("-")
-            value.setWordWrap(True)
-            details_layout.addWidget(label)
-            details_layout.addWidget(value)
-            self.dataset_details_labels[key] = value
-        right_layout.addWidget(self.dataset_dropdown)
-        right_layout.addWidget(self.details_group)
+
+        # Add DatasetSelectionWidget
+        self.dataset_selection_widget = DatasetSelectionWidget(controller=self.controller)
+        right_layout.addWidget(self.dataset_selection_widget)
+
         main_layout.addWidget(right_panel, stretch=0, alignment=Qt.AlignTop)
+
+        # Connect signal
+        self.dataset_selection_widget.dataset_selected.connect(self.load_dataset)
 
     def _connect_signals(self):
         if self.controller and hasattr(self.controller.main_controller, "dataset_manager"):
             dataset_manager = self.controller.main_controller.dataset_manager
-            dataset_manager.datasets_changed.connect(self.update_dataset_dropdown)
             dataset_manager.datasets_changed.connect(self._check_dataset_removed)
             dataset_manager.dataset_loaded.connect(self.on_dataset_loaded)
 
@@ -172,51 +162,10 @@ class DataView(QWidget):
             dataset_manager.plot_feature_data_ready.connect(self._on_compare1_plot_ready)
             dataset_manager.plot_2d_histogram_ready.connect(self._on_compare1_plot_ready)
 
-    def update_dataset_dropdown(self):
-        self.dataset_dropdown.clear()
-        if self.controller and hasattr(self.controller, "main_controller"):
-            dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
-            if dataset_manager and hasattr(dataset_manager, "get_names"):
-                names = dataset_manager.get_names()
-                self.dataset_dropdown.addItems(names)
-                if self.dataset_dropdown.count() > 0:
-                    self.dataset_dropdown.setCurrentIndex(0)  # Select the first dataset
-                    self.selected_dataset = self.dataset_dropdown.currentText()
-                    self.parent.statusBar().showMessage(f"Selected dataset: {self.selected_dataset}", 3000)
-        if self.dataset_dropdown.count() > 0:
-            current_name = self.dataset_dropdown.currentText()
-            self.load_dataset(current_name)
-
-    def update_dataset_details(self, dataset_name):
-        dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
-        dataset = None
-        if dataset_manager:
-            dataset = dataset_manager.loaded_datasets.get(dataset_name)
-        if not dataset:
-            for v in self.dataset_details_labels.values():
-                v.setText("-")
-            return
-
-        files = getattr(dataset, "files", ["N/A"])
-        files = [getattr(dataset, "input_path", ["N/A"]), getattr(dataset, "uncertainty_path", ["N/A"])]
-        n_samples = dataset.input_data.shape[0] if hasattr(dataset, "input_data") else "N/A"
-        n_features = dataset.input_data.shape[1] if hasattr(dataset, "input_data") else "N/A"
-        index = dataset.input_data.index if hasattr(dataset, "input_data") else "N/A"
-        if index is not None and hasattr(index, "min") and hasattr(index, "max"):
-            date_range = f"{index.min()} - {index.max()}"
-        else:
-            date_range = "N/A"
-        location = dataset.loc_cols if len(dataset.loc_cols) > 0 else "N/A"
-
-        self.dataset_details_labels["Files"].setText("\n".join(map(str, files)))
-        self.dataset_details_labels["Samples"].setText(str(n_samples))
-        self.dataset_details_labels["Features"].setText(str(n_features))
-        self.dataset_details_labels["Date/Index Range"].setText(str(date_range))
-        self.dataset_details_labels["Location"].setText(str(location))
-
     def _clone_loader(self, loader_widget):
         # Helper to clone the loading spinner container for each plot
         clone = QWidget()
+        clone.setStyleSheet("background: #fff;")
         layout = QVBoxLayout(clone)
         layout.setContentsMargins(0, 0, 0, 0)
         spinner = QLabel()
@@ -261,6 +210,100 @@ class DataView(QWidget):
 
         return tab_widget
 
+    def show_expanded_plot(self, view):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Expanded Plot")
+        dialog.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        dialog.setModal(False)
+
+        # Center the dialog
+        screen = QApplication.primaryScreen().geometry()
+        width, height = 1200, 800
+        x = (screen.width() - width) // 2
+        y = (screen.height() - height) // 2
+        dialog.setGeometry(x, y, width, height)
+
+        main_layout = QVBoxLayout(dialog)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # --- Custom title bar as QWidget for full drag area ---
+        title_bar_widget = QWidget()
+        title_bar_widget.setFixedHeight(28)  # Set a fixed height for the title bar
+        title_bar_layout = QHBoxLayout(title_bar_widget)
+        title_bar_layout.setContentsMargins(0, 0, 0, 0)
+        title_label = QLabel("Expanded Plot")
+        title_label.setStyleSheet("font-weight: bold; padding-left: 8px;")
+        title_bar_layout.addWidget(title_label)
+        title_bar_layout.addStretch()
+
+        minimize_btn = QPushButton("–")
+        fullscreen_btn = QPushButton("⛶")
+        close_btn = QPushButton("✕")
+        for btn in (minimize_btn, fullscreen_btn, close_btn):
+            btn.setFixedSize(28, 28)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    border: none;
+                    font-size: 16px;
+                }
+                QPushButton:hover {
+                    background: #eee;
+                }
+            """)
+        title_bar_layout.addWidget(minimize_btn)
+        title_bar_layout.addWidget(fullscreen_btn)
+        title_bar_layout.addWidget(close_btn)
+        main_layout.addWidget(title_bar_widget)
+
+        # --- Expanded plot view ---
+        expanded_view = QWebEngineView(dialog)
+        main_layout.addWidget(expanded_view)
+
+        # Set HTML only after the original view is loaded
+        def set_expanded_html(_ok=True):
+            view.page().toHtml(lambda html: expanded_view.setHtml(html))
+            try:
+                view.loadFinished.disconnect(set_expanded_html)
+            except Exception:
+                pass
+
+        view.loadFinished.connect(set_expanded_html)
+        set_expanded_html()
+
+        # --- Button actions ---
+        minimize_btn.clicked.connect(dialog.showMinimized)
+
+        def toggle_fullscreen():
+            if dialog.isFullScreen():
+                dialog.showNormal()
+            else:
+                dialog.showFullScreen()
+
+        fullscreen_btn.clicked.connect(toggle_fullscreen)
+        close_btn.clicked.connect(dialog.close)
+
+        # --- Drag support for title bar ---
+        drag_data = {"dragging": False, "offset": QPoint()}
+
+        def mousePressEvent(event):
+            if event.button() == Qt.LeftButton:
+                drag_data["dragging"] = True
+                drag_data["offset"] = event.globalPosition().toPoint() - dialog.frameGeometry().topLeft()
+
+        def mouseMoveEvent(event):
+            if drag_data["dragging"]:
+                dialog.move(event.globalPosition().toPoint() - drag_data["offset"])
+
+        def mouseReleaseEvent(event):
+            drag_data["dragging"] = False
+
+        title_bar_widget.mousePressEvent = mousePressEvent
+        title_bar_widget.mouseMoveEvent = mouseMoveEvent
+        title_bar_widget.mouseReleaseEvent = mouseReleaseEvent
+
+        dialog.show()
+
     def _create_compare_tab(self):
         tab_widget = QWidget()
         main_layout = QVBoxLayout(tab_widget)
@@ -274,56 +317,61 @@ class DataView(QWidget):
         left_col = QVBoxLayout()
         right_col = QVBoxLayout()
 
-        def show_expanded_plot(view):
-            dialog = QDialog(self)
-            dialog.setWindowTitle("Expanded Plot")
-            dialog.setModal(False)
-            # Get the available geometry of the primary screen
-            screen_geom = QApplication.primaryScreen().availableGeometry()
-            dialog.setGeometry(screen_geom)
-            layout = QVBoxLayout(dialog)
-            expanded_view = QWebEngineView(dialog)
-            view.page().toHtml(lambda html: expanded_view.setHtml(html))
-            layout.addWidget(expanded_view)
-            close_btn = QPushButton("Close")
-            close_btn.clicked.connect(dialog.close)
-            layout.addWidget(close_btn)
-            dialog.show()
-
         # Helper to create plot containers with loader
         def make_plot_container(view, loader):
-            stack = QStackedLayout()
-            stack.addWidget(view)
-            stack.addWidget(self._clone_loader(loader))
             container = QWidget()
             container.setStyleSheet("background: #fff;")
+            container.setMinimumSize(200, 200)
+
+            stack = QStackedLayout()
+            stack.addWidget(view)
+            stack.addWidget(loader)
             container.setLayout(stack)
-            expand_btn = QPushButton("⛶")
-            expand_btn.setFixedWidth(24)
-            expand_btn.setToolTip("Expand")
-            expand_btn.clicked.connect(lambda: show_expanded_plot(view))
-            row = QHBoxLayout()
-            row.addStretch()
-            row.addWidget(expand_btn)
+
+            # Create a layout to hold the expand button in the top-left corner
+            button_layout = QHBoxLayout()
+            button_layout.setContentsMargins(0, 0, 0, 0)
+            button_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+            expand_btn = QPushButton("⛶", container)
+            expand_btn.setFixedSize(24, 24)
+            expand_btn.setStyleSheet(
+                """
+                background: transparent;
+                color: black;
+                border: none;
+                font-size: 16px;
+                """
+            )
+            expand_btn.clicked.connect(lambda: self.show_expanded_plot(view))
+            button_layout.addWidget(expand_btn, alignment=Qt.AlignTop | Qt.AlignLeft)
+
+            # Overlay the button layout on top of the container using a QVBoxLayout
+            overlay_layout = QVBoxLayout(container)
+            overlay_layout.setContentsMargins(0, 0, 0, 0)
+            overlay_layout.addLayout(button_layout)
+            overlay_layout.addStretch()
+
             vbox = QVBoxLayout()
-            vbox.addLayout(row)
+            vbox.setContentsMargins(0, 0, 0, 0)
             vbox.addWidget(container)
             return vbox, container, stack
 
         # Create plot containers
         vbox1, compare1_container, compare1_stack = make_plot_container(
-            self.compare_upper_left_view, self.scatter_loader_container
+            self.compare_upper_left_view, self._clone_loader(self.scatter_loader_container)
         )
         self.compare1_stack = compare1_stack
         vbox2, compare2_container, _ = make_plot_container(
-            self.compare_upper_right_view, self.scatter_loader_container
+            self.compare_upper_right_view, self._clone_loader(self.scatter_loader_container)
         )
         vbox3, compare3_container, _ = make_plot_container(
-            self.compare_lower_left_view, self.scatter_loader_container
+            self.compare_lower_left_view, self._clone_loader(self.scatter_loader_container)
         )
         vbox4, compare4_container, _ = make_plot_container(
-            self.compare_lower_right_view, self.scatter_loader_container
+            self.compare_lower_right_view, self._clone_loader(self.scatter_loader_container)
         )
+        #TODO: Two known issues: The upper left plot is initialized later and is not showing the expanded button. The Ridgeline plot (bottom right) is not rendering on the expanded view.
 
         # Store for later use
         self._compare_plot_views = [
@@ -337,11 +385,10 @@ class DataView(QWidget):
         ]
         self._compare_plot_vboxes = [vbox1, vbox2, vbox3, vbox4]
 
-        # Add to layouts
-        left_col.addLayout(vbox1)
-        left_col.addLayout(vbox3)
-        right_col.addLayout(vbox2)
-        right_col.addLayout(vbox4)
+        left_col.addWidget(compare1_container)
+        left_col.addWidget(compare3_container)
+        right_col.addWidget(compare2_container)
+        right_col.addWidget(compare4_container)
 
         left_col.setStretch(0, 1)
         left_col.setStretch(1, 1)
@@ -590,13 +637,13 @@ class DataView(QWidget):
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
         if dataset_manager is not None:
             dataset_manager.load(name)
-            dataset = dataset_manager.loaded_datasets.get(name)
+            # dataset = dataset_manager.loaded_datasets.get(name)
 
     def on_dataset_loaded(self, dataset_name):
         # Only update if the loaded dataset is currently selected
-        if dataset_name == self.dataset_dropdown.currentText():
+        if dataset_name == self.dataset_selection_widget.dataset_dropdown.currentText():
             self.create_statistics_table(dataset_name)
-            self.update_dataset_details(dataset_name)
+            # self.update_dataset_details(dataset_name)
             self.update_compare_feature_dropdowns()
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
         if dataset_manager and dataset_name:
@@ -608,6 +655,11 @@ class DataView(QWidget):
             dataset_manager.plot_ridgeline_ready.connect(self._on_compare_ridgeline_ready)
 
     def create_statistics_table(self, dataset_name):
+        self.scatter_movie.start()
+        self.ts_movie.start()
+        self.scatter_stack.setCurrentIndex(1)
+        self.ts_stack.setCurrentIndex(1)
+
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
         if dataset_manager is not None:
             dataset = dataset_manager.loaded_datasets.get(dataset_name)
@@ -622,8 +674,6 @@ class DataView(QWidget):
         self.stats_table.setColumnCount(df.shape[1] + 1)
         headers = ['Features'] + [str(col) for col in df.columns]
         self.stats_table.setHorizontalHeaderLabels(headers)
-
-
 
         for row in range(df.shape[0]):
             index_item = QTableWidgetItem(str(df.index[row]))
@@ -689,11 +739,8 @@ class DataView(QWidget):
         # Trigger plot for the first feature if available
         if df.shape[0] > 0:
             self.stats_table.selectRow(0)
-            first_feature = str(df.index[0])
-            self.show_scatter_loading(True)
-            self.show_ts_loading(True)
-            dataset_manager.plot_data_uncertainty(dataset_name, first_feature)
-            dataset_manager.plot_feature_timeseries(dataset_name, first_feature)
+            # Treat initial load like a click on the first row
+            self.on_stats_table_clicked(0, 0)
 
     def on_stats_table_clicked(self, row, column):
         if row == self.plotted_row:
@@ -722,7 +769,7 @@ class DataView(QWidget):
                     category = combo.currentText()
             color = self.category_colors.get(category, "blue")
 
-            dataset_name = self.dataset_dropdown.currentText()
+            dataset_name = self.dataset_selection_widget.dataset_dropdown.currentText()
             new_x = dataset_manager.loaded_datasets[dataset_name].input_data[feature_name].values
             if self.scatter_fig is not None:
                 self.scatter_fig.data[0].marker.color = color
@@ -821,30 +868,16 @@ class DataView(QWidget):
         self.show_ts_loading(False)
 
     def on_dataset_removed(self):
-        # Clear dataset dropdown
-        self.dataset_dropdown.clear()
-        self.selected_dataset = None
-
-        # Clear dataset details
-        for v in self.dataset_details_labels.values():
-            v.setText("-")
-
-        # Clear stats table
+        # Clear stats table and plots only; widget handles dropdown/details
         self.stats_table.setRowCount(0)
-
-        # Clear feature compare dropdowns
         self.compare_feature1_dropdown.clear()
         self.compare_feature2_dropdown.clear()
-
-        # Clear plots
         for view in [
             self.scatter_view, self.ts_view,
             self.compare_upper_left_view, self.compare_upper_right_view,
             self.compare_lower_left_view, self.compare_lower_right_view
         ]:
             view.setHtml("<div></div>")
-
-        # Reset internal state
         self.plotted_row = None
         self.scatter_fig = None
         self.ts_fig = None
@@ -853,11 +886,10 @@ class DataView(QWidget):
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
         names = dataset_manager.get_names() if dataset_manager else []
         if not names:
-            # No datasets left, reset to blank/default
             self.on_dataset_removed()
         else:
-            # If current dataset is missing, select the next available
-            if self.selected_dataset not in names:
-                self.selected_dataset = names[0]
-                self.dataset_dropdown.setCurrentIndex(0)
-                self.load_dataset(self.selected_dataset)
+            # If current dataset is missing, select the next available in the widget
+            current = self.dataset_selection_widget.dataset_dropdown.currentText()
+            if current not in names:
+                self.dataset_selection_widget.dataset_dropdown.setCurrentIndex(0)
+                self.load_dataset(self.dataset_selection_widget.dataset_dropdown.currentText())

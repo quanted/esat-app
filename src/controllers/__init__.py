@@ -1,2 +1,3 @@
 from .data_controller import DataController
 from .project_controller import ProjectController
+from .model_controller import ModelController

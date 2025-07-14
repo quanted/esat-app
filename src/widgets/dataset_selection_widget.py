@@ -1,0 +1,108 @@
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QGroupBox, QSizePolicy
+from PySide6.QtCore import Qt, Signal
+
+
+class DatasetSelectionWidget(QWidget):
+    dataset_selected = Signal(str)
+
+    def __init__(self, controller=None, parent=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.selected_dataset = None
+        self.dataset_details_labels = {}
+
+        self._setup_ui()
+        self._connect_signals()
+        self.update_dataset_dropdown()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignTop)
+        layout.addWidget(QLabel("Select Dataset:"))
+
+        self.dataset_dropdown = QComboBox()
+        layout.addWidget(self.dataset_dropdown)
+
+        self.details_group = QGroupBox("Dataset Details")
+        self.details_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        details_layout = QVBoxLayout(self.details_group)
+        for key in ["Files", "Samples", "Features", "Date/Index Range", "Location"]:
+            label = QLabel(f"{key}:")
+            font = label.font()
+            font.setBold(True)
+            font.setPointSize(10)
+            label.setFont(font)
+            value = QLabel("-")
+            value.setWordWrap(True)
+            details_layout.addWidget(label)
+            details_layout.addWidget(value)
+            self.dataset_details_labels[key] = value
+        layout.addWidget(self.details_group)
+
+    def _connect_signals(self):
+        self.dataset_dropdown.currentIndexChanged.connect(self._on_dataset_changed)
+        dataset_manager = self._get_dataset_manager()
+        if dataset_manager:
+            dataset_manager.datasets_changed.connect(self.update_dataset_dropdown)
+            dataset_manager.dataset_loaded.connect(self.on_dataset_loaded)
+
+    def _get_dataset_manager(self):
+        if self.controller and hasattr(self.controller, "main_controller"):
+            return getattr(self.controller.main_controller, "dataset_manager", None)
+        return None
+
+    def update_dataset_dropdown(self):
+        self.dataset_dropdown.blockSignals(True)
+        self.dataset_dropdown.clear()
+        dataset_manager = self._get_dataset_manager()
+        if dataset_manager and hasattr(dataset_manager, "get_names"):
+            names = dataset_manager.get_names()
+            self.dataset_dropdown.addItems(names)
+            if names:
+                self.dataset_dropdown.setCurrentIndex(0)
+        self.dataset_dropdown.blockSignals(False)
+        if self.dataset_dropdown.count() > 0:
+            self._on_dataset_changed(0)
+
+    def _on_dataset_changed(self, idx):
+        name = self.dataset_dropdown.currentText()
+        self.selected_dataset = name
+        self.update_dataset_details(name)
+        self.dataset_selected.emit(name)
+
+    def update_dataset_details(self, dataset_name):
+        dataset_manager = self._get_dataset_manager()
+        dataset = None
+        if dataset_manager:
+            dataset = dataset_manager.loaded_datasets.get(dataset_name)
+        if not dataset:
+            for v in self.dataset_details_labels.values():
+                v.setText("-")
+            return
+
+        files = [getattr(dataset, "input_path", "N/A"), getattr(dataset, "uncertainty_path", "N/A")]
+        n_samples = getattr(dataset, "input_data", None)
+        n_samples = n_samples.shape[0] if n_samples is not None else "N/A"
+        n_features = getattr(dataset, "input_data", None)
+        n_features = n_features.shape[1] if n_features is not None else "N/A"
+        index = getattr(dataset, "input_data", None)
+        if index is not None and hasattr(index, "index"):
+            idx = index.index
+            if hasattr(idx, "min") and hasattr(idx, "max"):
+                date_range = f"{idx.min()} - {idx.max()}"
+            else:
+                date_range = "N/A"
+        else:
+            date_range = "N/A"
+        location = getattr(dataset, "loc_cols", [])
+        location = location if location else "N/A"
+
+        self.dataset_details_labels["Files"].setText("\n".join(map(str, files)))
+        self.dataset_details_labels["Samples"].setText(str(n_samples))
+        self.dataset_details_labels["Features"].setText(str(n_features))
+        self.dataset_details_labels["Date/Index Range"].setText(str(date_range))
+        self.dataset_details_labels["Location"].setText(str(location))
+
+    def on_dataset_loaded(self, dataset_name):
+        if dataset_name == self.dataset_dropdown.currentText():
+            self.update_dataset_details(dataset_name)
