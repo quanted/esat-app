@@ -1,6 +1,8 @@
 import re
 import time
 import logging
+
+import numpy as np
 from PySide6.QtWidgets import (QWidget, QTabWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFormLayout,
                                QComboBox, QPushButton, QGroupBox, QLineEdit, QMessageBox, QTextEdit, QProgressBar,
                                QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView, QStyledItemDelegate, QAbstractItemView)
@@ -344,9 +346,10 @@ class ModelView(QWidget):
         form_layout.addRow("Number of Factors", self.num_factors_edit)
 
         # Optional Random Seed
+        seed = np.random.randint(0, 999999)
         self.random_seed_edit = QLineEdit()
         self.random_seed_edit.setValidator(QIntValidator(0, 999999))
-        self.random_seed_edit.setPlaceholderText("Optional")
+        self.random_seed_edit.setPlaceholderText(f"seed")
         form_layout.addRow("Random Seed", self.random_seed_edit)
 
         # Algorithm selection
@@ -568,6 +571,10 @@ class ModelView(QWidget):
         self.basemodel_progress_table.viewport().update()
         self.basemodel_progress_table.setMouseTracking(True)
         self.basemodel_progress_table.rowClicked.connect(self.on_row_clicked)
+
+        # Highligh best row
+        if best_row >= 0:
+            self.on_row_clicked(best_row)
 
     def on_row_clicked(self, row):
         if row >= 0:
