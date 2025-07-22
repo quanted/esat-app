@@ -1,3 +1,5 @@
+from PySide6.QtCore import QTimer
+
 from src.views.data_view import DataView
 
 
@@ -23,3 +25,4 @@ class DataController:
         if self.data_view not in [central_layout.itemAt(i).widget() for i in range(central_layout.count())]:
             central_layout.addWidget(self.data_view)
 
+        QTimer.singleShot(0, self.data_view.reattach_webviews)

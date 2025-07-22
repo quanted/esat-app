@@ -13,6 +13,7 @@ class ModelController:
         if self.first_load:
             self.model_view.setVisible(True)
             self.first_load = False
+
         central_layout = self.main_controller.main_view.content_layout
         for i in reversed(range(central_layout.count())):
             widget = central_layout.itemAt(i).widget()
@@ -22,3 +23,5 @@ class ModelController:
         # Add DataView if not already present
         if self.model_view not in [central_layout.itemAt(i).widget() for i in range(central_layout.count())]:
             central_layout.addWidget(self.model_view)
+
+        self.model_view.reattach_webviews()

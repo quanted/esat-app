@@ -17,6 +17,7 @@ class DatasetSelectionWidget(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setAlignment(Qt.AlignTop)
         layout.addWidget(QLabel("Select Dataset:"))
 
@@ -24,9 +25,17 @@ class DatasetSelectionWidget(QWidget):
         layout.addWidget(self.dataset_dropdown)
 
         self.details_group = QGroupBox("Dataset Details")
+        self.details_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 12px;
+            }
+            QLabel, QComboBox {
+                font-size: 12px;
+            }
+        """)
         self.details_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         details_layout = QVBoxLayout(self.details_group)
-        for key in ["Files", "Samples", "Features", "Date/Index Range", "Location"]:
+        for key in ["Samples", "Features", "Date/Index Range", "Location"]:
             label = QLabel(f"{key}:")
             font = label.font()
             font.setBold(True)
@@ -97,7 +106,7 @@ class DatasetSelectionWidget(QWidget):
         location = getattr(dataset, "loc_cols", [])
         location = location if location else "N/A"
 
-        self.dataset_details_labels["Files"].setText("\n".join(map(str, files)))
+        # self.dataset_details_labels["Files"].setText("\n".join(map(str, files)))
         self.dataset_details_labels["Samples"].setText(str(n_samples))
         self.dataset_details_labels["Features"].setText(str(n_features))
         self.dataset_details_labels["Date/Index Range"].setText(str(date_range))

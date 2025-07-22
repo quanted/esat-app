@@ -5,10 +5,24 @@ from typing import List, Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel, QPushButton,
     QFileDialog, QGroupBox, QFormLayout, QScrollArea, QComboBox, QMessageBox,
-    QListWidget, QToolButton, QMenu, QSizePolicy, QFrame, QStackedWidget
+    QListWidget, QToolButton, QMenu, QSizePolicy, QFrame, QStackedWidget, QDialog,
+    QApplication
 )
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt
+
+
+class LoadingDialog(QDialog):
+    def __init__(self, message, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Please Wait")
+        self.setModal(True)
+        self.setWindowFlags(self.windowFlags() | Qt.FramelessWindowHint)
+        layout = QVBoxLayout(self)
+        label = QLabel(message)
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+        self.setFixedSize(220, 70)
 
 
 class ProjectView(QWidget):
@@ -340,6 +354,9 @@ class ProjectView(QWidget):
                     missing_value_label: str
                     ):
         """Add a new dataset to the DataManager"""
+        loading_dialog = LoadingDialog("Loading dataset...", self)
+        loading_dialog.show()
+        QApplication.processEvents()  # Ensure dialog appears
         try:
             self.controller.main_controller.dataset_manager.add_dataset(
                 name=name,
@@ -353,12 +370,19 @@ class ProjectView(QWidget):
         except ValueError:
             QMessageBox.critical(self, "Error", f"Dataset with name '{name}' already exists.")
             return
+        finally:
+            loading_dialog.close()
 
     def remove_dataset(self, name: str):
         """Remove a dataset from the DataManager"""
+        loading_dialog = LoadingDialog("Removing dataset...", self)
+        loading_dialog.show()
+        QApplication.processEvents()  # Ensure dialog appears
         try:
             self.controller.main_controller.dataset_manager.remove_dataset(name)
             self.parent.statusBar().showMessage(f"Dataset '{name}' removed.", 3000)
         except ValueError as e:
             QMessageBox.critical(self, "Error", str(e))
             return
+        finally:
+            loading_dialog.close()

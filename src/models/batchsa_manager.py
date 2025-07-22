@@ -127,3 +127,4 @@ class BatchSAManager(QObject):
         except Exception as e:
             self.error.emit("BatchSA", e)
             self.progress_queue.put(None)
+
