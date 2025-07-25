@@ -124,6 +124,8 @@ class DatasetManager(QObject):
         if name in self.loaded_datasets or name in self.loading_datasets:
             if VERBOSE:
                 logger.info(f"Dataset {name} is already loaded or loading")
+            if name in self.loaded_datasets:
+                self.dataset_loaded.emit(name)
             return
         self.loading_datasets.add(name)
         dataset = self.get_dataset_by_name(name)

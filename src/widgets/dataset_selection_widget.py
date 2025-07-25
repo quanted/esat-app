@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QGroupBox, QSizePolicy
 from PySide6.QtCore import Qt, Signal
+import pandas as pd
 
 
 class DatasetSelectionWidget(QWidget):
@@ -19,13 +20,10 @@ class DatasetSelectionWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setAlignment(Qt.AlignTop)
-        layout.addWidget(QLabel("Select Dataset:"))
 
-        self.dataset_dropdown = QComboBox()
-        layout.addWidget(self.dataset_dropdown)
-
-        self.details_group = QGroupBox("Dataset Details")
-        self.details_group.setStyleSheet("""
+        # Single group box for dataset selection and details
+        self.selection_group = QGroupBox("Dataset Selection")
+        self.selection_group.setStyleSheet("""
             QGroupBox {
                 font-size: 12px;
             }
@@ -33,8 +31,16 @@ class DatasetSelectionWidget(QWidget):
                 font-size: 12px;
             }
         """)
-        self.details_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
-        details_layout = QVBoxLayout(self.details_group)
+        self.selection_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        selection_layout = QVBoxLayout(self.selection_group)
+        selection_layout.setContentsMargins(8, 8, 8, 8)
+        selection_layout.setAlignment(Qt.AlignTop)
+
+        # Add dropdown without label
+        self.dataset_dropdown = QComboBox()
+        selection_layout.addWidget(self.dataset_dropdown)
+
+        # Add dataset details below dropdown
         for key in ["Samples", "Features", "Date/Index Range", "Location"]:
             label = QLabel(f"{key}:")
             font = label.font()
@@ -43,10 +49,11 @@ class DatasetSelectionWidget(QWidget):
             label.setFont(font)
             value = QLabel("-")
             value.setWordWrap(True)
-            details_layout.addWidget(label)
-            details_layout.addWidget(value)
+            selection_layout.addWidget(label)
+            selection_layout.addWidget(value)
             self.dataset_details_labels[key] = value
-        layout.addWidget(self.details_group)
+
+        layout.addWidget(self.selection_group)
 
     def _connect_signals(self):
         self.dataset_dropdown.currentIndexChanged.connect(self._on_dataset_changed)
@@ -94,13 +101,16 @@ class DatasetSelectionWidget(QWidget):
         n_samples = n_samples.shape[0] if n_samples is not None else "N/A"
         n_features = getattr(dataset, "input_data", None)
         n_features = n_features.shape[1] if n_features is not None else "N/A"
-        index = getattr(dataset, "input_data", None)
-        if index is not None and hasattr(index, "index"):
-            idx = index.index
-            if hasattr(idx, "min") and hasattr(idx, "max"):
-                date_range = f"{idx.min()} - {idx.max()}"
+        input_data = getattr(dataset, "input_data", None)
+        if input_data is not None and hasattr(input_data, "index"):
+            idx = input_data.index
+            if isinstance(idx, int) or isinstance(idx, pd.Timestamp) or isinstance(idx, pd.DatetimeIndex):
+                if hasattr(idx, "min") and hasattr(idx, "max"):
+                    date_range = f"{idx.min()} - {idx.max()}"
+                else:
+                    date_range = "N/A"
             else:
-                date_range = "N/A"
+                date_range = f"{idx[0]} - {idx[-1]}"
         else:
             date_range = "N/A"
         location = getattr(dataset, "loc_cols", [])

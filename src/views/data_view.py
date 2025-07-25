@@ -100,8 +100,6 @@ class DataView(QWidget):
             dataset_manager.uncertainty_plot_ready.connect(self.update_scatter_plot)
             dataset_manager.ts_plot_ready.connect(self.update_timeseries_plot)
 
-            # dataset_manager.plot_feature_data_ready.connect(self._on_compare_plot_ready)
-            # dataset_manager.plot_2d_histogram_ready.connect(self._on_compare_plot_ready)
 
     def toggle_loader(self, stack: QStackedLayout, movie: QMovie, show: bool):
         """Show or hide the loader in a stacked layout."""
@@ -250,8 +248,8 @@ class DataView(QWidget):
 
     def load_compare_plots(self):
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
-        dataset_name = next(iter(dataset_manager.loaded_datasets.keys()),
-                            None) if dataset_manager and dataset_manager.loaded_datasets else None
+        dataset_name = self.dataset_selection_widget.selected_dataset
+
         if dataset_manager and dataset_name:
 
             # Start loaders for all compare plots
@@ -580,17 +578,19 @@ class DataView(QWidget):
 
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
         if dataset_manager and dataset_manager.loaded_datasets:
-            dataset = next(iter(dataset_manager.loaded_datasets.values()))
-            if hasattr(dataset, "input_data"):
-                features = list(dataset.input_data.columns)
-                self.compare_feature1_dropdown.addItems(features)
-                self.compare_feature2_dropdown.addItems(features)
-                if self.compare_feature1_dropdown.count() > 0:
-                    self.compare_feature1_dropdown.setCurrentIndex(0)
-                if self.compare_feature2_dropdown.count() > 1:
-                    self.compare_feature2_dropdown.setCurrentIndex(1)
-                elif self.compare_feature2_dropdown.count() > 0:
-                    self.compare_feature2_dropdown.setCurrentIndex(0)
+            dataset_name = self.dataset_selection_widget.selected_dataset
+            if dataset_name in dataset_manager.loaded_datasets.keys():
+                dataset = dataset_manager.loaded_datasets[dataset_name]
+                if hasattr(dataset, "input_data"):
+                    features = list(dataset.input_data.columns)
+                    self.compare_feature1_dropdown.addItems(features)
+                    self.compare_feature2_dropdown.addItems(features)
+                    if self.compare_feature1_dropdown.count() > 0:
+                        self.compare_feature1_dropdown.setCurrentIndex(0)
+                    if self.compare_feature2_dropdown.count() > 1:
+                        self.compare_feature2_dropdown.setCurrentIndex(1)
+                    elif self.compare_feature2_dropdown.count() > 0:
+                        self.compare_feature2_dropdown.setCurrentIndex(0)
         self.compare_feature1_dropdown.blockSignals(False)
         self.compare_feature2_dropdown.blockSignals(False)
 
@@ -599,7 +599,7 @@ class DataView(QWidget):
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
         if not dataset_manager or not dataset_manager.loaded_datasets:
             return
-        dataset_name = next(iter(dataset_manager.loaded_datasets.keys()))
+        dataset_name = self.dataset_selection_widget.selected_dataset
         x_feature = self.compare_feature1_dropdown.currentText()
         y_feature = self.compare_feature2_dropdown.currentText()
         view_type = self.compare_plot_toggle.currentText()
@@ -646,6 +646,9 @@ class DataView(QWidget):
     def on_dataset_loaded(self, dataset_name):
         # Only update if the loaded dataset is currently selected
         if dataset_name == self.dataset_selection_widget.dataset_dropdown.currentText():
+            self.scatter_fig = None
+            self.ts_fig = None
+
             self.create_statistics_table(dataset_name)
             self.update_compare_feature_dropdowns()
             self.load_compare_plots()
@@ -725,11 +728,12 @@ class DataView(QWidget):
         if df.shape[0] > 0:
             self.stats_table.selectRow(0)
             # Treat initial load like a click on the first row
-            self.on_stats_table_clicked(0, 0)
+            self.on_stats_table_clicked(0, 0, True)
 
-    def on_stats_table_clicked(self, row, column):
-        logger.info(f"Stats table clicked at row {row}, column {column}")
-        if row == self.plotted_row:
+    def on_stats_table_clicked(self, row, column, bypass=False):
+        dataset_name = self.dataset_selection_widget.selected_dataset
+        logger.info(f"Stats table clicked at row {row}, column {column}, dataset: {dataset_name}")
+        if row == self.plotted_row and not bypass:
             return
         self.plotted_row = row
 
@@ -739,7 +743,6 @@ class DataView(QWidget):
             return
 
         feature_name = feature_item.text()
-        dataset_name = self.dataset_selection_widget.dataset_dropdown.currentText()
         dataset = dataset_manager.loaded_datasets.get(dataset_name)
         if not dataset:
             return
@@ -832,7 +835,8 @@ class DataView(QWidget):
             self.toggle_loader(self.analyze_plot_stacks[0], self.scatter_movie, False)
             try:
                 self.formatted_webviews['scatter'].loadFinished.disconnect(hide_spinner)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error disconnecting loadFinished: {e}")
                 pass
 
         self.formatted_webviews['scatter'].loadFinished.connect(hide_spinner)
@@ -875,10 +879,10 @@ class DataView(QWidget):
 
         def hide_spinner(_ok):
             self.toggle_loader(self.analyze_plot_stacks[1], self.ts_movie, False)
-
             try:
                 self.formatted_webviews['ts'].loadFinished.disconnect(hide_spinner)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Error disconnecting loadFinished: {e}")
                 pass
 
         self.formatted_webviews['ts'].loadFinished.connect(hide_spinner)
