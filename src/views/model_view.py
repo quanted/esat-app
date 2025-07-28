@@ -422,7 +422,7 @@ class ModelView(QWidget):
         mse = progress_data["mse"]
 
         now = time.monotonic()
-        min_interval = 1 / 240
+        min_interval = 1 / 60
 
         if model_i not in self._last_update_time:
             self._last_update_time[model_i] = 0
@@ -431,7 +431,7 @@ class ModelView(QWidget):
         update_now = (elapsed > min_interval) or (i == max_iter) or progress_data.get("completed", False)
 
         if not update_now:
-            return
+            pass
 
         self._last_update_time[model_i] = now
 
@@ -445,12 +445,7 @@ class ModelView(QWidget):
         if i >= max_iter or progress_data.get("completed", False):
             converged = i < max_iter
             converged_label.setText("Yes" if converged else "No")
-            color = "#43A047" if converged else "#E53935"  # Green for success, red for failure
             self.basemodel_progress_table.mark_row_completed(row)
-            for col in range(self.basemodel_progress_table.columnCount()):
-                item = self.basemodel_progress_table.item(row, col)
-                if item:
-                    item.setBackground(QColor(color))
 
         # Update the overall progress bar
         completed_models = 0
@@ -473,6 +468,7 @@ class ModelView(QWidget):
         # Emit signal if all models are complete
         if completed_models == total_models and total_models > 0 and not self._batch_completed:
             self._batch_completed = True
+            QApplication.processEvents()  # Flush event queue before final update
             self.all_models_completed.emit()
 
     def set_webview_html(self, view_name, html):
@@ -869,6 +865,7 @@ class ModelView(QWidget):
 
     def batch_model_finish(self):
         logger.info("Batch model run completed, processing results...")
+        QApplication.processEvents()  # Flush event queue
         # 1. Extract all data as text, converting Progress to "iterations/max_iterations"
         min_qtrue = float('inf')
         best_row = -1

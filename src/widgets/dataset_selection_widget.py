@@ -90,7 +90,8 @@ class DatasetSelectionWidget(QWidget):
         dataset_manager = self._get_dataset_manager()
         dataset = None
         if dataset_manager:
-            dataset = dataset_manager.loaded_datasets.get(dataset_name)
+            if dataset_name in dataset_manager.loaded_datasets.keys():
+                dataset = dataset_manager.loaded_datasets.get(dataset_name)
         if not dataset:
             for v in self.dataset_details_labels.values():
                 v.setText("-")
@@ -102,6 +103,11 @@ class DatasetSelectionWidget(QWidget):
         n_features = getattr(dataset, "input_data", None)
         n_features = n_features.shape[1] if n_features is not None else "N/A"
         input_data = getattr(dataset, "input_data", None)
+
+        # Remove rows that are empty or all NaN
+        if input_data is not None and isinstance(input_data, pd.DataFrame):
+            input_data = input_data.dropna(how='all')
+
         if input_data is not None and hasattr(input_data, "index"):
             idx = input_data.index
             if isinstance(idx, int) or isinstance(idx, pd.Timestamp) or isinstance(idx, pd.DatetimeIndex):

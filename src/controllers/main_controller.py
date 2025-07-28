@@ -38,6 +38,36 @@ class MainController(QMainWindow):
         self.completed_batches = {}
         self.batch_analysis_dict = {}
 
+    @staticmethod
+    def global_cleanup():
+        """Perform global cleanup tasks."""
+        logger.info("Performing global cleanup tasks.")
+        # Clean up batch thread
+        if hasattr(MainController, "_batch_thread"):
+            thread = MainController._batch_thread
+            if thread and thread.isRunning():
+                logger.info("Stopping batch thread.")
+                thread.quit()
+                thread.wait()
+        # Clean up batch analysis thread
+        if hasattr(MainController, "_batch_analysis_thread"):
+            thread = MainController._batch_analysis_thread
+            if thread and thread.isRunning():
+                logger.info("Stopping batch analysis thread.")
+                thread.quit()
+                thread.wait()
+
+        # Clean up controllers
+        for ctrl_attr in ["project_controller", "data_controller", "model_controller"]:
+            ctrl = getattr(MainController, ctrl_attr, None)
+            if ctrl and hasattr(ctrl, "cleanup"):
+                logger.info(f"Cleaning up {ctrl_attr}.")
+                ctrl.cleanup()
+        # Clean up dataset manager
+        if hasattr(MainController, "dataset_manager"):
+            logger.info("Cleaning up DatasetManager.")
+            MainController.dataset_manager.cleanup()
+
     def run_batch(self, dataset, factors, models, method, max_iter, seed, init_method, init_norm, converge_delta, converge_n, progress_callback):
         """Run batch analysis with the given parameters."""
         V, U = self.dataset_manager.preprocess_dataset(dataset)

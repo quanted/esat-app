@@ -82,6 +82,7 @@ class DatasetManager(QObject):
                             f"uncertainty_file_path: {uncertainty_file_path}, index_column: {index_column}, "
                             f"location_ids: {location_ids}, missing_value_label: {missing_value_label}, "
                             f"latitude: {latitude}, longitude: {longitude}, location_label: {location_label}")
+            self.load(name)  # Automatically load the dataset after adding
             self.datasets_changed.emit()
 
     def remove_dataset(self, name: str):

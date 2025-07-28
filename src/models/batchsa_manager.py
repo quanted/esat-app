@@ -67,6 +67,12 @@ class BatchSAManager(QObject):
         self.dataset_name = dataset_name
         self.batch_sa = None
 
+    def cleanup(self):
+        """Cleanup resources and threads."""
+        logger.info(f"Cleaning up BatchSAManager - ID: {self.id}")
+        if self.listener_thread and self.listener_thread.is_alive():
+            self.progress_queue.put(None)
+            self.listener_thread = None
 
     def setup(self, V: np.ndarray, U: np.ndarray, factors: int, models: int, method: str, seed: int, max_iter: int,
               init_method: str, init_norm: bool, converge_delta: float, converge_n: int,

@@ -1,8 +1,12 @@
 from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel
-from PySide6.QtGui import QPixmap, QMovie
+from PySide6.QtGui import QMovie
 from PySide6.QtCore import Qt, QSize, QTimer
 from src.controllers.main_controller import MainController
 import sys
+
+def cleanup():
+    # Example: terminate multiprocessing pools, threads, or other resources
+    MainController.global_cleanup()
 
 def do_init(app, splash):
     from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -22,6 +26,7 @@ def do_init(app, splash):
 
 def main():
     app = QApplication(sys.argv)
+    app.aboutToQuit.connect(cleanup)
 
     # Load the GIF and extract the first frame as a pixmap
     movie = QMovie("src/resources/icons/loading_spinner.gif")
