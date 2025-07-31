@@ -40,6 +40,13 @@ class ModelAnalysisManager(QObject):
         self.model_idx = model_idx
         self.analysis = None
 
+    def cleanup(self):
+        """Cleanup method to release resources."""
+        self.sa = None
+        self.data_handler = None
+        self.analysis = None
+        logger.info("ModelAnalysisManager cleaned up.")
+
     def run(self):
         self.analysis = ModelAnalysis(datahandler=self.data_handler,
                                      model=self.sa,

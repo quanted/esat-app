@@ -49,7 +49,7 @@ class ModelView(QWidget):
         self._last_update_time = {}
         self._batch_completed = False
 
-        self._model_table_data = []
+        self._model_table_data = {}
 
         self.formatted_webviews = {
             'batchloss': self.webviews[0],
@@ -72,6 +72,8 @@ class ModelView(QWidget):
             data_manager = self.controller.data_manager
             if hasattr(data_manager, "data_loaded"):
                 data_manager.data_loaded.connect(self.on_data_loaded)
+
+        self.dataset_selection_widget.dataset_selected.connect(self._on_dataset_changed)
 
     def _setup_ui(self):
         main_layout = QHBoxLayout(self)
@@ -96,7 +98,7 @@ class ModelView(QWidget):
 
         model_selected_widget = self._create_model_selected_widget()
         right_layout.addWidget(model_selected_widget)
-        self.model_dropdown.currentIndexChanged.connect(self.on_dropdown_changed)
+        self.model_dropdown.currentIndexChanged.connect(self.on_model_changed)
 
         main_layout.addWidget(right_panel, stretch=0, alignment=Qt.AlignTop)
 
@@ -117,8 +119,14 @@ class ModelView(QWidget):
         self.model_dropdown.setEnabled(False)
         group_layout.addWidget(self.model_dropdown)
 
+        self.model_dataset_label = QLabel("-")
+        self.model_dataset_label.setStyleSheet("font-size: 12px;")
+        group_layout.addWidget(QLabel("<b>Dataset:</b>"))
+        group_layout.addWidget(self.model_dataset_label)
+
         self.model_details_layout = QFormLayout()
         self.model_details_labels = {
+            ""
             "Converged": QLabel("-"),
             "Q(True)": QLabel("-"),
             "Q(Robust)": QLabel("-"),
@@ -130,8 +138,62 @@ class ModelView(QWidget):
 
         return group_box
 
-    def on_dropdown_changed(self, index):
-        if index >= 0 and index < len(self._model_table_data):
+    def _on_dataset_changed(self, dataset_name):
+        # Update base model table for the new dataset
+        self._refresh_base_model_table(dataset_name)
+        # Update batch analysis plots
+        self._update_batchanalysis_tab()
+        # Update the model dropdown and details
+        model_data = self._model_table_data.get(dataset_name, [])
+        self.model_dropdown.clear()
+        if model_data:
+            self.model_dropdown.addItems([f"Model {row[0]}" for row in model_data])
+            self.model_dropdown.setEnabled(True)
+            # Highlight best row if available
+            best_row = -1
+            min_qtrue = float('inf')
+            for i, row in enumerate(model_data):
+                try:
+                    qtrue = float(row[2])
+                    if qtrue < min_qtrue:
+                        min_qtrue = qtrue
+                        best_row = i
+                except ValueError:
+                    continue
+            if best_row >= 0:
+                self.model_dropdown.setCurrentIndex(best_row)
+                self.basemodel_progress_table._selected_row = best_row
+                self.basemodel_progress_table.setCurrentCell(best_row, 0)
+                self.basemodel_progress_table.viewport().update()
+                self.on_model_changed(best_row)
+        else:
+            self.model_dropdown.setEnabled(False)
+        self.model_dataset_label.setText(dataset_name if dataset_name else "-")
+        for label in self.model_details_labels.values():
+            label.setText("-")
+
+    def _refresh_base_model_table(self, dataset_name):
+        # Fetch model data for the selected dataset
+        if dataset_name not in self._model_table_data:
+            logger.warning(f"No model data found for dataset: {dataset_name}")
+            # Clear the table
+            self.basemodel_progress_table.setRowCount(0)
+            return
+        model_data = self._model_table_data[dataset_name]
+        self.completed_batch_table(model_data, best_row=-1)
+        # Enable/disable model dropdown as needed
+        if model_data:
+            self.model_dropdown.clear()
+            self.model_dropdown.addItems([f"Model {row[0]}" for row in model_data])
+            self.model_dropdown.setEnabled(True)
+        else:
+            self.model_dropdown.clear()
+            self.model_dropdown.setEnabled(False)
+
+    def on_model_changed(self, index):
+        dataset = self.dataset_selection_widget.selected_dataset
+        model_table_data = self._model_table_data.get(dataset, [])
+        if index >= 0 and index < len(model_table_data):
             self.basemodel_progress_table._selected_row = index
             self.basemodel_progress_table.setCurrentCell(index, 0)
             self.basemodel_progress_table.viewport().update()
@@ -149,11 +211,13 @@ class ModelView(QWidget):
                             font = item.font()
                             font.setBold(False)
                             item.setFont(font)
-            row = self._model_table_data[index]
+            row = model_table_data[index]
             self.model_details_labels["Converged"].setText(row[5])
             self.model_details_labels["Q(True)"].setText(row[2])
             self.model_details_labels["Q(Robust)"].setText(row[3])
             self.model_details_labels["MSE"].setText(row[4])
+            dataset_name = self.dataset_selection_widget.selected_dataset
+            self.model_dataset_label.setText(dataset_name if dataset_name else "-")
         else:
             for label in self.model_details_labels.values():
                 label.setText("-")
@@ -218,6 +282,11 @@ class ModelView(QWidget):
         return None, container, stack
 
     def _on_run_batch_model(self):
+
+        # Deselect any selected row in the table
+        self.basemodel_progress_table.clearSelection()
+        # Remove highlighted row
+        self.basemodel_progress_table._selected_row = -1
 
         self.info_dialog = InfoDialog("Setting up batch model runs...", self)
         self.info_dialog.show()
@@ -473,7 +542,8 @@ class ModelView(QWidget):
 
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
-        if view_name in self.formatted_webviews.keys():
+        if view_name in self.formatted_webviews.keys() and html:
+            logger.info(f"Setting HTML for webview: {view_name}")
             self.formatted_webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
 
@@ -482,15 +552,18 @@ class ModelView(QWidget):
         Reattach shared webviews with cached HTML, ensuring correct layout and sizing.
         """
 
-        for idx, view_name in enumerate(['batchloss', 'batchdist', 'batchresiduals']):
-            stack = self.batch_plot_stacks[idx]
-            webview = self.formatted_webviews[view_name]
-
-            # Detach webview from any previous parent
+        # Detach all webviews
+        for webview in self.webviews:
+            webview.setHtml("")  # Clear content
             webview.setParent(None)
             webview.setMinimumSize(200, 200)
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            QApplication.processEvents()
+
+        for idx, view_name in enumerate(['batchloss', 'batchdist', 'batchresiduals']):
+            stack = self.batch_plot_stacks[idx]
+            webview = self.formatted_webviews[view_name]
 
             # Remove all widgets from stack
             while stack.count():
@@ -515,7 +588,8 @@ class ModelView(QWidget):
             QApplication.processEvents()
 
             # Restore cached HTML
-            html = self._webview_html_cache.get(view_name)
+            # html = self._webview_html_cache.get(view_name)
+            html = None
             if view_name == "batchloss":
                 self._update_batchloss_plot(html)
             elif view_name == "batchdist":
@@ -693,15 +767,18 @@ class ModelView(QWidget):
         self._update_factoranalysis_tab(data)
 
     def _update_batchloss_plot(self, html=None):
+        self.toggle_loader(self.batch_plot_stacks[0], self.batchloss_movie, True)
         if html is None:
             dataset_name = self.dataset_selection_widget.selected_dataset
             batch_analysis_dict = getattr(self.controller.main_controller, "batch_analysis_dict", {})
             if not batch_analysis_dict or dataset_name not in batch_analysis_dict:
                 logger.error(f"Dataset '{dataset_name}' not found in batch_analysis_dict.")
                 html = ""
+                self._batch_loss_fig = None
             else:
-                batchanalysis_manager = self.controller.main_controller.batch_analysis_dict[dataset_name]
-                self._batch_loss_fig = batchanalysis_manager.loss_plot
+                batchanalysis_manager = batch_analysis_dict[dataset_name]
+                self._batch_loss_fig = batchanalysis_manager.loss_plot  # Always fetch fresh
+                logger.info(f"Batch loss plot for dataset '{dataset_name}' updated.")
                 self._batch_loss_fig.update_layout(
                     title=dict(font=dict(size=12), x=0.5, xanchor="center"),
                     width=None,
@@ -714,8 +791,6 @@ class ModelView(QWidget):
                     config={'responsive': True, 'displayModeBar': 'hover'}
                 )
 
-        self.toggle_loader(self.batch_plot_stacks[0], self.batchloss_movie, True)
-
         def hide_spinner(_ok):
             self.toggle_loader(self.batch_plot_stacks[0], self.batchloss_movie, False)
             try:
@@ -727,15 +802,17 @@ class ModelView(QWidget):
         self.set_webview_html("batchloss", html)
 
     def _update_batchdist_plot(self, html=None):
+        self.toggle_loader(self.batch_plot_stacks[1], self.batchdist_movie, True)
         if html is None:
             dataset_name = self.dataset_selection_widget.selected_dataset
             batch_analysis_dict = getattr(self.controller.main_controller, "batch_analysis_dict", {})
             if not batch_analysis_dict or dataset_name not in batch_analysis_dict:
                 logger.error(f"Dataset '{dataset_name}' not found in batch_analysis_dict.")
                 html = ""
+                self._batch_dist_fig = None
             else:
-                batchanalysis_manager = self.controller.main_controller.batch_analysis_dict[dataset_name]
-                self._batch_dist_fig = batchanalysis_manager.loss_distribution_plot
+                batchanalysis_manager = batch_analysis_dict[dataset_name]
+                self._batch_dist_fig = batchanalysis_manager.loss_distribution_plot  # Always fetch fresh
                 self._batch_dist_fig.update_layout(
                     title=dict(font=dict(size=12), x=0.5, xanchor="center"),
                     width=None,
@@ -747,7 +824,6 @@ class ModelView(QWidget):
                     full_html=False, include_plotlyjs='cdn',
                     config={'responsive': True, 'displayModeBar': 'hover'}
                 )
-        self.toggle_loader(self.batch_plot_stacks[1], self.batchdist_movie, True)
 
         def hide_spinner(_ok):
             self.toggle_loader(self.batch_plot_stacks[1], self.batchdist_movie, False)
@@ -760,6 +836,7 @@ class ModelView(QWidget):
         self.set_webview_html("batchdist", html)
 
     def _update_batchresiduals_plot(self, html=None):
+        self.toggle_loader(self.batch_plot_stacks[2], self.batchresiduals_movie, True)
         if html is None:
             dataset_name = self.dataset_selection_widget.selected_dataset
 
@@ -767,15 +844,17 @@ class ModelView(QWidget):
             if not batch_analysis_dict or dataset_name not in batch_analysis_dict:
                 logger.error(f"Dataset '{dataset_name}' not found in batch_analysis_dict.")
                 html = ""
+                self._batch_residual_fig = None
             else:
                 feature_list = self.controller.main_controller.dataset_manager.loaded_datasets[
                     dataset_name].input_data_df.columns.tolist() if dataset_name else None
                 self.feature_dropdown.clear()
                 self.feature_dropdown.addItems(feature_list)
-
+                batchanalysis_manager = self.controller.main_controller.batch_analysis_dict[dataset_name]
+                if batchanalysis_manager is None:
+                    return
                 # Set initial feature plot
                 if feature_list:
-                    batchanalysis_manager = self.controller.main_controller.batch_analysis_dict[dataset_name]
                     self._batch_residual_fig = batchanalysis_manager.temporal_residual_plot
                     self._batch_residual_fig.update_layout(
                         title=dict(font=dict(size=12), x=0.5, xanchor="center", text=f"Model Residual - Feature {feature_list[0]}"),
@@ -792,24 +871,30 @@ class ModelView(QWidget):
                     # Update feature plot on dropdown change
                     def on_feature_changed(index):
                         self.toggle_loader(self.batch_plot_stacks[2], self.batchresiduals_movie, True)
-
-                        feature = self.feature_dropdown.currentText()
-                        # redraw the feature plot with the selected feature
-                        if not feature:
-                            logger.warning("No feature selected, skipping update.")
+                        feature = feature_list[index] if index >= 0 else None
+                        if not feature or self._batch_residual_fig is None:
                             return
+
                         V_primes = batchanalysis_manager.analysis.aggregated_output
-                        # Iterate over the V_primes and calculate the residual for the specific feature for all models and update trace
-                        for i, v_prime in V_primes.items():
-                            if feature not in v_prime:
-                                logger.warning(f"Feature '{feature}' not found in V_prime for model {i}.")
+                        input_y = batchanalysis_manager.data_handler.input_data_plot[feature]
+                        selected_model = self.model_dropdown.currentIndex() + 1
+
+                        # Update all traces to show residuals for the selected feature
+                        for i, trace in enumerate(self._batch_residual_fig.data):
+                            if i == 0:
+                                trace.visible = True  # Input trace always visible
                                 continue
-                            # Get the residuals for the selected feature
-                            residuals = batchanalysis_manager.data_handler.input_data_plot[feature] - v_prime[feature]
-                            # Update self._batch_residual_fig with the new residuals
-                            trace = self._batch_residual_fig.data[i]
-                            if trace.name == feature:
-                                trace.y = residuals.values
+                            model_v_prime = V_primes[i - 1]
+                            if feature in model_v_prime:
+                                model_y = model_v_prime[feature]
+                                if len(input_y) == len(model_y) and np.all(
+                                        np.isfinite(input_y.values - model_y.values)):
+                                    trace.y = input_y.values - model_y.values
+                                else:
+                                    trace.y = [None] * len(input_y)
+                            trace.visible = True
+                            trace.name = f"Model {i} - {feature}"
+
                         self._batch_residual_fig.update_layout(
                             title=dict(font=dict(size=12), x=0.5, xanchor="center", text=f"Model Residual - Feature {feature}")
                         )
@@ -822,14 +907,18 @@ class ModelView(QWidget):
 
                     self.feature_dropdown.currentIndexChanged.connect(on_feature_changed)
 
-        self.toggle_loader(self.batch_plot_stacks[2], self.batchresiduals_movie, True)
-
         def hide_spinner(_ok):
             self.toggle_loader(self.batch_plot_stacks[2], self.batchresiduals_movie, False)
             try:
                 self.formatted_webviews['batchresiduals'].loadFinished.disconnect(hide_spinner)
-            except Exception:
+            except (TypeError, RuntimeError):
                 pass
+
+        # Disconnect before connecting to avoid duplicate connections
+        try:
+            self.formatted_webviews['batchresiduals'].loadFinished.disconnect(hide_spinner)
+        except (TypeError, RuntimeError):
+            pass
 
         self.formatted_webviews['batchresiduals'].loadFinished.connect(hide_spinner)
         self.set_webview_html("batchresiduals", html)
@@ -893,7 +982,8 @@ class ModelView(QWidget):
             except ValueError:
                 continue
         QTimer.singleShot(100, lambda: self.completed_batch_table(table_data, best_row))
-        self._model_table_data = table_data
+        dataset = self.dataset_selection_widget.selected_dataset
+        self._model_table_data[dataset] = table_data
 
         if best_row >= 0:
             self.model_dropdown.clear()
@@ -904,7 +994,7 @@ class ModelView(QWidget):
             self.model_dropdown.setEnabled(False)
 
         self.basemodel_progress_table.rowClicked.connect(self.on_row_clicked)
-        self.model_dropdown.currentIndexChanged.connect(self.on_dropdown_changed)
+        self.model_dropdown.currentIndexChanged.connect(self.on_model_changed)
 
         self.controller.main_controller.batchanalysis_finished.connect(self._update_batchanalysis_tab)
         self._restore_run_button()
@@ -960,12 +1050,6 @@ class ModelView(QWidget):
         logger.info(f"Best model: {best_row+1} with Q(True) value: {table_data[best_row][2] if best_row >= 0 else 'N/A'}")
 
         self.overall_progress_bar.setVisible(False)
-        # self.selected_model_label.setVisible(True)
-        # if best_row >= 0:
-        #     self.selected_model_label.setText(f"Selected Model: {best_row + 1}")
-        # else:
-        #     self.selected_model_label.setText("No model selected")
-
         # 2. Clear and repopulate table with QTableWidgetItems only
         self.basemodel_progress_table.setRowCount(0)
         self.basemodel_progress_table.setHorizontalHeaderLabels([
@@ -982,13 +1066,10 @@ class ModelView(QWidget):
                 item.setTextAlignment(Qt.AlignCenter)
                 font = item.font()
                 if i == best_row:
-                    # item.setBackground(QColor("#FFF59D"))
                     font.setBold(True)
                 item.setFont(font)
                 self.basemodel_progress_table.setItem(i, col, item)
 
-        # self.selected_model_label.setVisible(True)
-        # self.selected_model_label.setText(f"Selected Model: Model {best_row + 1}")
         self.basemodel_progress_table._selected_row = best_row
 
         # 3. Set custom delegate to draw border around best row
@@ -1008,10 +1089,7 @@ class ModelView(QWidget):
 
     def on_row_clicked(self, row):
         if row >= 0:
-            # self.selected_model_label.setText("Selected Model")
             self.model_dropdown.setCurrentIndex(row)
-        # else:
-        #     self.selected_model_label.setText("No model selected")
 
     def on_row_doubleclicked(self, row):
         print(f"Row {row} double-clicked")

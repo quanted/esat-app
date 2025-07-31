@@ -947,14 +947,15 @@ class DataView(QWidget):
 
             # Restore HTML
             html = self._webview_html_cache.get(view_name)
-            if view_name == "compare":
-                self._on_compare_plot_ready(None, None, html=html)
-            elif view_name == "heatmap":
-                self._on_compare_correlation_heatmap_ready(None, None, html=html)
-            elif view_name == "histogram":
-                self._on_compare_superimposed_histograms_ready(None, None, html=html)
-            elif view_name == "ridge":
-                self._on_compare_ridgeline_ready(None, None, html=html)
+            if html is not None:
+                if view_name == "compare":
+                    self._on_compare_plot_ready(None, None, html=html)
+                elif view_name == "heatmap":
+                    self._on_compare_correlation_heatmap_ready(None, None, html=html)
+                elif view_name == "histogram":
+                    self._on_compare_superimposed_histograms_ready(None, None, html=html)
+                elif view_name == "ridge":
+                    self._on_compare_ridgeline_ready(None, None, html=html)
 
             container = stack.parentWidget()
             if container and container.layout():
@@ -991,10 +992,11 @@ class DataView(QWidget):
             QApplication.processEvents()
 
             html = self._webview_html_cache.get(view_name)
-            if view_name == "scatter":
-                self.update_scatter_plot(None, None, html=html)
-            elif view_name == "ts":
-                self.update_timeseries_plot(None, None, html=html)
+            if html is not None:
+                if view_name == "scatter":
+                    self.update_scatter_plot(None, None, html=html)
+                elif view_name == "ts":
+                    self.update_timeseries_plot(None, None, html=html)
 
         compare_tab = self.tabs.widget(1)  # Assuming compare tab is at index 1
         main_layout = compare_tab.layout()

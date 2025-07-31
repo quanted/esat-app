@@ -50,6 +50,20 @@ class DatasetManager(QObject):
         self.workers = {}
         self.loading_datasets = set()  # Track currently loading datasets
 
+    def cleanup(self):
+        if VERBOSE:
+            logger.info(f"Cleaning DatasetManager instance {self._instance_id}")
+        for thread in self.threads.values():
+            thread.quit()
+            thread.wait()
+        self.threads.clear()
+        self.workers.clear()
+        self.loaded_datasets.clear()
+        self.loading_datasets.clear()
+        self.datasets.clear()
+        self.dataset_feature_categories.clear()
+        self.locations.clear()
+
     def add_dataset(self,
             name: str,
             data_file_path: str,

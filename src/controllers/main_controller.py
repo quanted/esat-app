@@ -18,6 +18,7 @@ class MainController(QMainWindow):
     batchsa_finished = Signal(str)
     batchsa_canceled = Signal()
     batchanalysis_finished = Signal(str)
+    batchresiduals_finished = Signal(object)
 
     def __init__(self, parent=None, webviews=None):
         super().__init__(parent)
@@ -67,6 +68,29 @@ class MainController(QMainWindow):
         if hasattr(MainController, "dataset_manager"):
             logger.info("Cleaning up DatasetManager.")
             MainController.dataset_manager.cleanup()
+        # Clean up model analysis manager
+        if hasattr(MainController, "modelanalysis_manager"):
+            logger.info("Cleaning up ModelAnalysisManager.")
+            try:
+                MainController.modelanalysis_manager.cleanup()
+            except Exception:
+                pass
+        # Clean up Batch Analysis Manager
+        if hasattr(MainController, "batch_analysis_dict"):
+            logger.info("Cleaning up BatchAnalysisManager.")
+            try:
+                for batch_analysis in MainController.batch_analysis_dict.values():
+                    batch_analysis.cleanup()
+            except Exception:
+                pass
+        # Clean up BatchSAManager
+        if hasattr(MainController, "completed_batches"):
+            logger.info("Cleaning up BatchSAManager.")
+            try:
+                for batchsa_manager in MainController.completed_batches.values():
+                    batchsa_manager.cleanup()
+            except Exception:
+                pass
 
     def run_batch(self, dataset, factors, models, method, max_iter, seed, init_method, init_norm, converge_delta, converge_n, progress_callback):
         """Run batch analysis with the given parameters."""
