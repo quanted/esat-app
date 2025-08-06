@@ -51,6 +51,7 @@ class ModelView(QWidget):
 
         self._model_table_data = {}
 
+        # Batch analysis plots
         self.formatted_webviews = {
             'batchloss': self.webviews[0],
             'batchdist': self.webviews[1],
@@ -64,6 +65,23 @@ class ModelView(QWidget):
 
         self.batch_plot_stacks = [None, None, None]
         self.batch_loadings = [self.batchloss_loading, self.batchdist_loading, self.batchresiduals_loading]
+
+        # Model analysis plots
+        self.model_analysis_plots = {
+            'obs_pred_scatter': self.webviews[3],
+            'obs_pred_ts': self.webviews[4],
+            'residual_histogram': self.webviews[5],
+            'profile_contrib_plot': self.webviews[6],
+            'factor_fingerprints': self.webviews[7],
+            'g_plot': self.webviews[8],
+            'factor_contribution': self.webviews[9],
+        }
+        self.model_loading_movies = {}
+        for key in self.model_analysis_plots.keys():
+            loader, movie = self._setup_loader(loader_path)
+            self.model_loading_movies[key] = (loader, movie)
+
+        self.model_plot_stacks = [None] * len(self.model_analysis_plots)
 
         self._setup_ui()
 
@@ -750,9 +768,35 @@ class ModelView(QWidget):
 
     def _setup_modelanalysis_tab(self):
         self.modelanalysis_tab = QWidget()
-        self.modelanalysis_layout = QVBoxLayout(self.modelanalysis_tab)
-        self.modelanalysis_placeholder = QLabel("No models available")
-        self.modelanalysis_layout.addWidget(self.modelanalysis_placeholder)
+        layout = QVBoxLayout(self.modelanalysis_tab)
+
+        # Create subtabs
+        self.modelanalysis_subtabs = QTabWidget()
+        self.modelanalysis_subtabs.setTabPosition(QTabWidget.South)  # Tabs at the top
+
+        # Add subtabs with placeholders
+        self.feature_analysis_tab = QWidget()
+        self.feature_analysis_tab.setLayout(QVBoxLayout())
+        self.feature_analysis_tab.layout().addWidget(QLabel("Feature Analysis Content"))
+
+        self.residual_analysis_tab = QWidget()
+        self.residual_analysis_tab.setLayout(QVBoxLayout())
+        self.residual_analysis_tab.layout().addWidget(QLabel("Residual Analysis Content"))
+
+        self.factor_analysis_tab_sub = QWidget()
+        self.factor_analysis_tab_sub.setLayout(QVBoxLayout())
+        self.factor_analysis_tab_sub.layout().addWidget(QLabel("Factor Analysis Content"))
+
+        self.factor_summary_tab = QWidget()
+        self.factor_summary_tab.setLayout(QVBoxLayout())
+        self.factor_summary_tab.layout().addWidget(QLabel("Factor Summary Content"))
+
+        self.modelanalysis_subtabs.addTab(self.feature_analysis_tab, "Feature Analysis")
+        self.modelanalysis_subtabs.addTab(self.residual_analysis_tab, "Residual Analysis")
+        self.modelanalysis_subtabs.addTab(self.factor_analysis_tab_sub, "Factor Analysis")
+        self.modelanalysis_subtabs.addTab(self.factor_summary_tab, "Factor Summary")
+
+        layout.addWidget(self.modelanalysis_subtabs)
         return self.modelanalysis_tab
 
     def _setup_factoranalysis_tab(self):

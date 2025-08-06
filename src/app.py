@@ -12,7 +12,7 @@ def do_init(app, splash):
     from PySide6.QtWebEngineWidgets import QWebEngineView
 
     webviews = []
-    for _ in range(8):
+    for _ in range(10):
         wv = QWebEngineView()
         wv.setAttribute(Qt.WA_DontShowOnScreen, True)
         wv.setHtml("<html></html>")
