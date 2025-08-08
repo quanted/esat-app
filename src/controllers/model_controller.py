@@ -3,7 +3,7 @@ from src.views.model_view import ModelView
 
 class ModelController:
     def __init__(self, main_controller, webviews=None):
-        self.main_controller = main_controller  # Expected to be MainView
+        self.main_controller = main_controller
         self.model_view = ModelView(parent=self.main_controller.main_view, controller=self, webviews=webviews)
         self.model_view.setVisible(False)
         self.first_load = True
@@ -25,3 +25,5 @@ class ModelController:
             central_layout.addWidget(self.model_view)
 
         self.model_view.reattach_webviews()
+
+
