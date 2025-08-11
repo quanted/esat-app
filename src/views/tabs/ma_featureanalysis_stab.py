@@ -120,7 +120,6 @@ class FeatureAnalysisSubTab(QWidget):
 
     def create_scatter_plot(self, fig=None, html=None):
         logger.info(f"[FeatureAnalysis SubTab] Creating scatter plot.")
-        logger.info(f"[FeatureAnalysis SubTab] create_scatter_plot -  fig: {fig}, html: {html}")
 
         feature_idx = self.table.currentRow() if self.table.currentRow() >= 0 else 0
         if fig is None:
@@ -245,13 +244,15 @@ class FeatureAnalysisSubTab(QWidget):
     def update_feature_metrics(self):
         pass
 
-    def update_plots(self, feature_idx: int = 0):
+    def update_plots(self, feature_idx: int = None):
         """
         Update the plots based on the selected feature index.
         """
         if self.controller.main_controller.selected_modelanalysis_manager is None:
             logger.warning("No model analysis manager available.")
             return
+        feature_idx = feature_idx if feature_idx is not None else self.table.currentRow()
+
         toggle_loader(self.plot_stacks[1], self.tsplot_movie, True)
         toggle_loader(self.plot_stacks[0], self.scatterplot_movie, True)
 
@@ -298,3 +299,9 @@ class FeatureAnalysisSubTab(QWidget):
         """
         super().showEvent(event)
         self.refresh_on_activate()
+        self.table.itemSelectionChanged.connect(self.update_plots_on_row_click)
+
+    def update_plots_on_row_click(self):
+        feature_idx = self.table.currentRow()
+        if feature_idx >= 0:
+            self.update_plots(feature_idx=feature_idx)

@@ -10,6 +10,7 @@ from src.widgets.dataset_selection_widget import DatasetSelectionWidget
 from src.views.tabs.mv_batchrun_tab import BatchRunTab
 from src.views.tabs.mv_batchanalysis_tab import BatchAnalysisTab
 from src.views.tabs.mv_model_analysis_tab import ModelAnalysisTab
+from src.views.tabs.ma_featureanalysis_stab import FeatureAnalysisSubTab
 
 logging.basicConfig(
     level=logging.INFO,
@@ -207,9 +208,21 @@ class ModelView(QWidget):
             self.model_details_labels["MSE"].setText(row[4])
             dataset_name = self.dataset_selection_widget.selected_dataset
             self.model_dataset_label.setText(dataset_name if dataset_name else "-")
+
+            # Update the selected model analysis manager
+            if dataset in self.controller.main_controller.modelanalysis_manager:
+                self.controller.main_controller.selected_modelanalysis_manager = self.controller.main_controller.modelanalysis_manager[dataset].get(index)
+
+            # Trigger plot updates
+            if self.controller.main_controller.selected_modelanalysis_manager:
+                self.feature_analysis_tab.update_plots(feature_idx=0)
         else:
             for label in self.model_details_labels.values():
                 label.setText("-")
+
+        # Update model analysis tab
+        self.controller.main_controller.run_model_analysis(dataset_name=dataset, model_idx=index)
+        self._update_modelanalysis_tab()
 
     def _setup_tabs(self):
         # Create and set up the main tabs for the ModelView
@@ -246,9 +259,7 @@ class ModelView(QWidget):
         self.modelanalysis_subtabs.setTabPosition(QTabWidget.South)  # Tabs at the top
 
         # Add subtabs with placeholders
-        self.feature_analysis_tab = QWidget()
-        self.feature_analysis_tab.setLayout(QVBoxLayout())
-        self.feature_analysis_tab.layout().addWidget(QLabel("Feature Analysis Content"))
+        self.feature_analysis_tab = FeatureAnalysisSubTab(parent=self, controller=self.controller)
 
         self.residual_analysis_tab = QWidget()
         self.residual_analysis_tab.setLayout(QVBoxLayout())
@@ -284,9 +295,9 @@ class ModelView(QWidget):
     def _update_batchanalysis_tab(self):
         self.batchanalysis_tab.update_all()
 
-    def _update_modelanalysis_tab(self, data):
+    def _update_modelanalysis_tab(self):
         # Update the Model Analysis tab with new data
-        self.modelanalysis_placeholder.setText(f"Model Analysis loaded: {len(data)} items")
+        self.modelanalysis_tab.feature_analysis_tab.refresh_on_activate()
 
     def _update_factoranalysis_tab(self, data):
         # Update the Factor Analysis tab with new data
