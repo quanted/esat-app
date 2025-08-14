@@ -23,6 +23,7 @@ class FeatureAnalysisSubTab(QWidget):
         self.plot_stacks = [None, None]
         self.loaders = [self.scatterplot_loading, self.tsplot_loading]
 
+        self.plots_connected = False  # Flag to track if plots are connected
         self._setup_ui()
 
     def _setup_ui(self):
@@ -60,35 +61,6 @@ class FeatureAnalysisSubTab(QWidget):
         main_layout.addWidget(splitter)
         self.setLayout(main_layout)
 
-    def set_modelanalysis_manager(self, manager):
-        """
-        Set the model analysis manager and reconnect signals.
-        """
-        # Optionally disconnect old signals
-        try:
-            self.controller.main_controller.selected_modelanalysis_manager.featureMetricsReady.disconnect(self.on_feature_metrics_ready)
-        except Exception:
-            pass
-        try:
-            self.controller.main_controller.selected_modelanalysis_manager.estimatedVsObservedReady.disconnect(self.create_scatter_plot)
-        except Exception:
-            pass
-        try:
-            self.controller.main_controller.selected_modelanalysis_manager.estimateTimeseriesReady.disconnect(self.create_ts_plot)
-        except Exception:
-            pass
-        self.controller.main_controller.selected_modelanalysis_manager = manager
-        self._setup_signals()
-
-    def _setup_signals(self):
-        manager = self.controller.main_controller.selected_modelanalysis_manager
-        if manager is None:
-            logger.warning("No model analysis manager available for signal setup.")
-            return
-        manager.featureMetricsReady.connect(self.on_feature_metrics_ready)
-        manager.estimatedVsObservedReady.connect(self.create_scatter_plot)
-        manager.estimateTimeseriesReady.connect(self.create_ts_plot)
-
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html:
@@ -97,30 +69,35 @@ class FeatureAnalysisSubTab(QWidget):
             self._webview_html_cache[view_name] = html
 
     def set_statistics_table(self, headers, data: pd.DataFrame):
-        self.table.setColumnCount(len(headers))
-        self.table.setHorizontalHeaderLabels(headers)
-        self.table.setRowCount(len(data))
-        data = data[headers].values.tolist() if isinstance(data, pd.DataFrame) else data
-        logger.info(f"Setting statistics table with {len(data)} rows and {len(headers)} columns.")
-        for row_idx, row_data in enumerate(data):
-            for col_idx, value in enumerate(row_data):
-                # round numeric values to 3 decimal places
-                if isinstance(value, (int, float)):
-                    value = round(value, 3)
-                item = QTableWidgetItem(str(value))
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                self.table.setItem(row_idx, col_idx, item)
-        if len(data) > 0:
-            self.table.selectRow(0)
-        # Set table properties
-        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.table.resizeColumnsToContents()
-        self.table.resizeRowsToContents()
-        self.table.horizontalHeader().setStretchLastSection(True)
+        if data is None:
+            self.table.setColumnCount(len(headers))
+            self.table.setHorizontalHeaderLabels(headers)
+            self.table.setRowCount(0)
+            logger.error('Unable to create Feature Statistics table')
+        else:
+            self.table.setColumnCount(len(headers))
+            self.table.setHorizontalHeaderLabels(headers)
+            self.table.setRowCount(len(data))
+            data = data[headers].values.tolist() if isinstance(data, pd.DataFrame) else data
+            logger.info(f"Setting statistics table with {len(data)} rows and {len(headers)} columns.")
+            for row_idx, row_data in enumerate(data):
+                for col_idx, value in enumerate(row_data):
+                    # round numeric values to 3 decimal places
+                    if isinstance(value, (int, float)):
+                        value = round(value, 3)
+                    item = QTableWidgetItem(str(value))
+                    item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    self.table.setItem(row_idx, col_idx, item)
+            if len(data) > 0:
+                self.table.selectRow(0)
+            # Set table properties
+            self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            self.table.resizeColumnsToContents()
+            self.table.resizeRowsToContents()
+            self.table.horizontalHeader().setStretchLastSection(True)
 
     def create_scatter_plot(self, fig=None, html=None):
         logger.info(f"[FeatureAnalysis SubTab] Creating scatter plot.")
-
         feature_idx = self.table.currentRow() if self.table.currentRow() >= 0 else 0
         if fig is None:
             try:
@@ -236,10 +213,12 @@ class FeatureAnalysisSubTab(QWidget):
                    "SE Regression", "KS Normal Residuals", "KS PValue", "KS Statistic"]
         # extract specified columns from dataframe
         try:
+            logger.info("[FeatureAnalysis SubTab] Feature metrics ready, updating table.")
             model_metrics = self.controller.main_controller.selected_modelanalysis_manager.analysis.statistics
             self.set_statistics_table(columns, model_metrics)
-        except Exception:
+        except Exception as e:
             logger.error("Statistics not available in the analysis.")
+            logger.error(f"Error updating feature metrics table: {e}")
 
     def update_feature_metrics(self):
         pass
@@ -256,9 +235,11 @@ class FeatureAnalysisSubTab(QWidget):
         toggle_loader(self.plot_stacks[1], self.tsplot_movie, True)
         toggle_loader(self.plot_stacks[0], self.scatterplot_movie, True)
 
-        # Connect update functions of plots to the model analysis manager
-        self.controller.main_controller.selected_modelanalysis_manager.estimatedVsObservedReady.connect(self.create_scatter_plot)
-        self.controller.main_controller.selected_modelanalysis_manager.estimateTimeseriesReady.connect(self.create_ts_plot)
+        # Do NOT reconnect signals here to avoid duplicate connections
+        if not self.plots_connected:
+            self.controller.main_controller.selected_modelanalysis_manager.estimatedVsObservedReady.connect(self.create_scatter_plot)
+            self.controller.main_controller.selected_modelanalysis_manager.estimateTimeseriesReady.connect(self.create_ts_plot)
+            self.plots_connected = True
 
         self.controller.main_controller.selected_modelanalysis_manager.run_est_obs(feature_idx=feature_idx)
         self.controller.main_controller.selected_modelanalysis_manager.run_est_ts(feature_idx=feature_idx)

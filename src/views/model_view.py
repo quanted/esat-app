@@ -56,14 +56,7 @@ class ModelView(QWidget):
         }
 
         self._setup_ui()
-
-        # Connect to DataManager's data_loaded signal if available
-        if self.controller and hasattr(self.controller, "data_manager"):
-            data_manager = self.controller.data_manager
-            if hasattr(data_manager, "data_loaded"):
-                data_manager.data_loaded.connect(self.on_data_loaded)
-
-        self.dataset_selection_widget.dataset_selected.connect(self._on_dataset_changed)
+        self._setup_signals()
 
     def _setup_ui(self):
         main_layout = QHBoxLayout(self)
@@ -71,6 +64,12 @@ class ModelView(QWidget):
 
         # Left: Tabs
         self.tabs = QTabWidget()
+        self.tabs.setStyleSheet('''
+            QTabBar::tab:selected {
+                background: #cce6ff;
+                color: black;
+            }
+        ''')
         self.tabs.setTabPosition(QTabWidget.South)  # Tabs at the bottom
         self._setup_tabs()
         main_layout.addWidget(self.tabs, stretch=3)
@@ -91,6 +90,17 @@ class ModelView(QWidget):
         self.model_dropdown.currentIndexChanged.connect(self.on_model_changed)
 
         main_layout.addWidget(right_panel, stretch=0, alignment=Qt.AlignTop)
+
+    def _setup_signals(self):
+        # Connect to DataManager's data_loaded signal if available
+        if self.controller and hasattr(self.controller, "data_manager"):
+            data_manager = self.controller.data_manager
+            if hasattr(data_manager, "data_loaded"):
+                data_manager.data_loaded.connect(self.on_data_loaded)
+
+        self.dataset_selection_widget.dataset_selected.connect(self._on_dataset_changed)
+        self.controller.main_controller.modelstats_finished.connect(self._update_modelanalysis_tab)
+        self.controller.main_controller.modelresiduals_finished.connect(self._update_residualanalysis_tab)
 
     def _create_model_selected_widget(self):
         group_box = QGroupBox("Model Selection")
@@ -209,20 +219,23 @@ class ModelView(QWidget):
             dataset_name = self.dataset_selection_widget.selected_dataset
             self.model_dataset_label.setText(dataset_name if dataset_name else "-")
 
-            # Update the selected model analysis manager
-            if dataset in self.controller.main_controller.modelanalysis_manager:
-                self.controller.main_controller.selected_modelanalysis_manager = self.controller.main_controller.modelanalysis_manager[dataset].get(index)
-
-            # Trigger plot updates
-            if self.controller.main_controller.selected_modelanalysis_manager:
-                self.feature_analysis_tab.update_plots(feature_idx=0)
+            # # Trigger plot updates
+            # if self.controller.main_controller.selected_modelanalysis_manager:
+            #     logger.info(f"[ModelView] Updating model analysis plots for dataset '{dataset}', model index {index}")
+            #     self.modelanalysis_tab.feature_analysis_tab.plots_connected = False
+            #     self.modelanalysis_tab.feature_analysis_tab.on_feature_metrics_ready()
+            #     self.modelanalysis_tab.feature_analysis_tab.update_plots(feature_idx=0)
         else:
             for label in self.model_details_labels.values():
                 label.setText("-")
 
-        # Update model analysis tab
+        # Update the selected model analysis manager
+        if dataset in self.controller.main_controller.modelanalysis_manager:
+            self.controller.main_controller.selected_modelanalysis_manager = self.controller.main_controller.modelanalysis_manager[dataset].get(index)
+
+        logger.info(f"[ModelView] Model changed to index {index} for dataset '{dataset}'")
         self.controller.main_controller.run_model_analysis(dataset_name=dataset, model_idx=index)
-        self._update_modelanalysis_tab()
+
 
     def _setup_tabs(self):
         # Create and set up the main tabs for the ModelView
@@ -249,6 +262,7 @@ class ModelView(QWidget):
         Reattach shared webviews with cached HTML, ensuring correct layout and sizing.
         """
         self.batchanalysis_tab.reattach_webviews()
+        self.modelanalysis_tab.reattach_webviews()
 
     def _setup_modelanalysis_tab(self):
         self.modelanalysis_tab = QWidget()
@@ -288,16 +302,20 @@ class ModelView(QWidget):
         self.factoranalysis_layout.addWidget(self.factoranalysis_placeholder)
         return self.factoranalysis_tab
 
-    def on_model_loaded(self, data):
-        self._update_modelanalysis_tab(data)
-        self._update_factoranalysis_tab(data)
-
     def _update_batchanalysis_tab(self):
         self.batchanalysis_tab.update_all()
 
     def _update_modelanalysis_tab(self):
         # Update the Model Analysis tab with new data
+        logger.info(f"[ModelView] Updating Model Analysis tab with new data")
+        # Trigger plot updates
+        self.modelanalysis_tab.feature_analysis_tab.plots_connected = False
         self.modelanalysis_tab.feature_analysis_tab.refresh_on_activate()
+
+    def _update_residualanalysis_tab(self):
+        logger.info(f"[ModelView] Updating Residual Analysis tab with new data")
+        self.modelanalysis_tab.residual_analysis_tab.plots_connected = False
+        self.modelanalysis_tab.residual_analysis_tab.refresh_on_activate()
 
     def _update_factoranalysis_tab(self, data):
         # Update the Factor Analysis tab with new data

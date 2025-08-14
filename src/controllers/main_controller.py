@@ -1,7 +1,7 @@
 import logging
 
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, Signal, QTimer
 
 from src.views.main_view import MainView
 from src.controllers import ProjectController, DataController, ModelController
@@ -20,6 +20,8 @@ class MainController(QMainWindow):
     batchanalysis_finished = Signal(str)
     batchresiduals_finished = Signal(object)
     modelanalysis_finished = Signal(str)
+    modelstats_finished = Signal(str)
+    modelresiduals_finished = Signal(str)
 
     def __init__(self, parent=None, webviews=None):
         super().__init__(parent)
@@ -152,7 +154,8 @@ class MainController(QMainWindow):
             return
         if dataset_name not in self.modelanalysis_manager:
             self.modelanalysis_manager[dataset_name] = {}
-        self.run_model_analysis(dataset_name, best_model)
+        # Delay the model analysis call slightly to ensure readiness
+        QTimer.singleShot(200, lambda: self.run_model_analysis(dataset_name, best_model))
         logger.info(f"Model analysis and plots started for batch: {dataset_name}")
 
     def run_batch_analysis(self, dataset_name):
@@ -228,6 +231,8 @@ class MainController(QMainWindow):
                     logger.error(f"Error instantiating ModelAnalysisManager: {e}", exc_info=True)
                     raise
                 self.modelanalysis_manager[dataset_name][model_idx] = analysis_manager
+                analysis_manager.modelStatsReady.connect(self.modelstats_finished.emit)
+                analysis_manager.residualHistogramReady.connect(self.modelresiduals_finished.emit)
                 logger.info("Calling analysis_manager.run_all()...")
                 try:
                     analysis_manager.run_all()
