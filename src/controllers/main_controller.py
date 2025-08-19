@@ -21,7 +21,13 @@ class MainController(QMainWindow):
     batchresiduals_finished = Signal(object)
     modelanalysis_finished = Signal(str)
     modelstats_finished = Signal(str)
-    modelresiduals_finished = Signal(str)
+    modelresiduals_finished = Signal(object, object)
+
+    factor_profile_contrib_finished = Signal(object, object)
+    factor_fingerprints_finished = Signal(object)
+    factor_gplot_finished = Signal(object)
+
+    factors_contributions_finished = Signal(object, object)
 
     def __init__(self, parent=None, webviews=None):
         super().__init__(parent)
@@ -42,6 +48,7 @@ class MainController(QMainWindow):
 
         self.completed_batches = {}
         self.batch_analysis_dict = {}
+        self._factor_analysis_signal_trackers = {}
 
     @staticmethod
     def global_cleanup():
@@ -233,6 +240,12 @@ class MainController(QMainWindow):
                 self.modelanalysis_manager[dataset_name][model_idx] = analysis_manager
                 analysis_manager.modelStatsReady.connect(self.modelstats_finished.emit)
                 analysis_manager.residualHistogramReady.connect(self.modelresiduals_finished.emit)
+                # # --- Factor analysis signals tracking ---
+                analysis_manager.factorProfileReady.connect(self.factor_profile_contrib_finished)
+                analysis_manager.factorFingerprintsReady.connect(self.factor_fingerprints_finished)
+                analysis_manager.gSpaceReady.connect(self.factor_gplot_finished)
+                # # ---
+                analysis_manager.factorContributionsReady.connect(self.factors_contributions_finished)
                 logger.info("Calling analysis_manager.run_all()...")
                 try:
                     analysis_manager.run_all()
@@ -246,4 +259,3 @@ class MainController(QMainWindow):
             logger.error(f"Error in run_model_analysis: {e}", exc_info=True)
             # Optionally, show a dialog or propagate the error
         return None
-

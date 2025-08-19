@@ -107,7 +107,7 @@ class FeatureAnalysisSubTab(QWidget):
                 fig = None
                 html = ""
         if fig is not None:
-            fig.update_layout(title=dict(font=dict(size=12), x=0.5, xanchor="center"), width=None, height=None,
+            fig.update_layout(title=dict(font=dict(size=13), x=0.5, xanchor="center"), width=None, height=None,
                               autosize=True, margin=dict(l=5, r=5, t=30, b=5))
             html = fig.to_html(full_html=False, include_plotlyjs='cdn',
                                config={'responsive': True, 'displayModeBar': 'hover'})
@@ -137,7 +137,7 @@ class FeatureAnalysisSubTab(QWidget):
 
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=12), x=0.5, xanchor="center"),
+                title=dict(font=dict(size=13), x=0.5, xanchor="center"),
                 width=None,
                 height=None,
                 autosize=True,
@@ -219,9 +219,6 @@ class FeatureAnalysisSubTab(QWidget):
         except Exception as e:
             logger.error("Statistics not available in the analysis.")
             logger.error(f"Error updating feature metrics table: {e}")
-
-    def update_feature_metrics(self):
-        pass
 
     def update_plots(self, feature_idx: int = None):
         """

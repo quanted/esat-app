@@ -34,10 +34,12 @@ class ModelAnalysisManager(QObject):
     estimatedVsObservedReady = Signal(object)
     estimateTimeseriesReady = Signal(object)
     factorProfileReady = Signal(object, object)
+    allfactorProfileReady = Signal(object)
     factors3dReady = Signal(object)
     factorFingerprintsReady = Signal(object)
     factorContributionsReady = Signal(object, object)
     gSpaceReady = Signal(object)
+
 
     def __init__(self, sa, data_handler, model_idx: int = -1, parent=None):
         super().__init__(parent)
@@ -166,6 +168,11 @@ class ModelAnalysisManager(QObject):
             logger.error(f"Exception in run_factor_profile(): {e}\n{traceback.format_exc()}")
             return
         try:
+            self.run_all_factor_profile()
+        except Exception as e:
+            logger.error(f"Exception in run_all_factor_profile(): {e}\n{traceback.format_exc()}")
+            return
+        try:
             self.run_factors_3d()
         except Exception as e:
             logger.error(f"Exception in run_factors_3d(): {e}\n{traceback.format_exc()}")
@@ -214,11 +221,21 @@ class ModelAnalysisManager(QObject):
         self._start_thread(fn, handle_result)
 
     def run_factor_profile(self, factor_idx: int = 1):
+        print(f"Running factor profile for factor index: {factor_idx}")
         def fn():
             return self.analysis.plot_factor_profile(factor_idx=factor_idx, show=False)
         def handle_result(result):
             self.plots[f"factor_profile_{factor_idx}"] = result
             self.factorProfileReady.emit(*(result if result is not None else (None, None)))
+        self._start_thread(fn, handle_result)
+
+    def run_all_factor_profile(self):
+        print(f"Running all factor profile plot")
+        def fn():
+            return self.analysis.plot_all_factors(show=False)
+        def handle_result(result):
+            self.plots[f"all_factor_profiles"] = result
+            self.allfactorProfileReady.emit(result)
         self._start_thread(fn, handle_result)
 
     def run_factors_3d(self):
@@ -237,7 +254,7 @@ class ModelAnalysisManager(QObject):
             self.factorFingerprintsReady.emit(result)
         self._start_thread(fn, handle_result)
 
-    def run_factor_contributions(self, feature_idx: int = 0, contribution_threshold: float = 0.1):
+    def run_factor_contributions(self, feature_idx: int = 0, contribution_threshold: float = 0.05):
         def fn():
             return self.analysis.plot_factor_contributions(feature_idx=feature_idx,
                                                            contribution_threshold=contribution_threshold,
@@ -247,11 +264,12 @@ class ModelAnalysisManager(QObject):
             self.factorContributionsReady.emit(*result)
         self._start_thread(fn, handle_result)
 
-    def run_g_space(self, factor_1_idx: int = 0, factor_2_idx: int = 1):
-        factor_1_idx = factor_1_idx if factor_1_idx is not None else 0
-        factor_2_idx = factor_2_idx if factor_2_idx is not None else 1
+    def run_g_space(self, factor_1_idx: int = 1, factor_2_idx: int = 2):
+        factor_1_idx = factor_1_idx if factor_1_idx is not None else 1
+        factor_2_idx = factor_2_idx if factor_2_idx is not None else 2
         def fn():
-            return self.analysis.plot_g_space(factor_1_idx=factor_1_idx, factor_2_idx=factor_2_idx, show=False)
+            return self.analysis.plot_g_space(factor_1=factor_1_idx, factor_2=factor_2_idx, show=False)
         def handle_result(result):
             self.plots[f"g_space_{factor_1_idx}_{factor_2_idx}"] = result
             self.gSpaceReady.emit(result)
+        self._start_thread(fn, handle_result)

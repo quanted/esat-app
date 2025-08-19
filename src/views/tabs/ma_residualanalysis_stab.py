@@ -1,12 +1,13 @@
 import logging
 import pandas as pd
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QGroupBox, QVBoxLayout, QLabel, QSizePolicy, QTableWidget,
-                               QSplitter, QTableWidgetItem, QApplication)
+                               QSplitter, QTableWidgetItem, QApplication, QLineEdit)
+from PySide6.QtGui import QDoubleValidator
 from PySide6.QtCore import Qt
 
 from src.utils import create_loader, toggle_loader, create_plot_container
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -23,6 +24,9 @@ class ResidualAnalysisSubTab(QWidget):
         self.plot_stack = None
 
         self.plots_connected = False
+        self.stats_table_created = False
+        self.residual_df = None
+        self.current_row = 0
         self._setup_ui()
 
     def _setup_ui(self):
@@ -36,6 +40,7 @@ class ResidualAnalysisSubTab(QWidget):
         self.feature_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.feature_table.setSelectionMode(QTableWidget.SingleSelection)
         self.feature_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.feature_table.cellClicked.connect(lambda row, col: self.update_plots_on_row_click())
         left_layout.addWidget(self.feature_table)
         left_group.setLayout(left_layout)
         left_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -52,12 +57,28 @@ class ResidualAnalysisSubTab(QWidget):
         self.scaled_table = QTableWidget()
         self.scaled_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         right_layout.addWidget(self.scaled_table)
+
+        # Add Absolute Threshold input field
+        threshold_layout = QHBoxLayout()
+        threshold_label = QLabel("Absolute Threshold:")
+        self.threshold_input = QLineEdit()
+        self.threshold_input.setValidator(QDoubleValidator())
+        self.threshold_input.setText("3.0")
+        self.threshold_input.setFixedWidth(60)
+        self.threshold_input.editingFinished.connect(lambda: self.set_residuals_table(data=None, update=True))
+        threshold_layout.addWidget(threshold_label)
+        threshold_layout.addWidget(self.threshold_input)
+        threshold_layout.addStretch()
+        right_layout.addLayout(threshold_layout)
+
         right_group.setLayout(right_layout)
         right_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         splitter.addWidget(right_group)
 
-        # Set splitter sizes: 25% (left), 70% (center), 15% (right)
-        splitter.setSizes([25, 70, 15])
+        splitter.setStretchFactor(0, 30)
+        splitter.setStretchFactor(1, 45)
+        splitter.setStretchFactor(2, 25)
+
         main_layout.addWidget(splitter)
 
     def set_webview_html(self, view_name, html):
@@ -78,7 +99,6 @@ class ResidualAnalysisSubTab(QWidget):
             self.feature_table.setHorizontalHeaderLabels(headers)
             self.feature_table.setRowCount(len(data))
             data = data[headers].values.tolist() if isinstance(data, pd.DataFrame) else data
-            logger.info(f"Setting statistics table with {len(data)} rows and {len(headers)} columns.")
             for row_idx, row_data in enumerate(data):
                 for col_idx, value in enumerate(row_data):
                     # round numeric values to 3 decimal places
@@ -87,22 +107,31 @@ class ResidualAnalysisSubTab(QWidget):
                     item = QTableWidgetItem(str(value))
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                     self.feature_table.setItem(row_idx, col_idx, item)
-            if len(data) > 0:
+            if len(data) > 0 and not self.stats_table_created:
+                print(f"Setting stats table to 0. Current row: {self.feature_table.currentRow()}. Created: {self.stats_table_created}")
                 self.feature_table.selectRow(0)
             # Set table properties
             self.feature_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             self.feature_table.resizeColumnsToContents()
             self.feature_table.resizeRowsToContents()
             self.feature_table.horizontalHeader().setStretchLastSection(True)
+            self.stats_table_created = True
 
-    def set_residuals_table(self, data: pd.DataFrame):
-        if data is None:
+    def set_residuals_table(self, data: pd.DataFrame=None, update=False):
+        if data is None and not update:
             self.scaled_table.setColumnCount(3)
             self.scaled_table.setHorizontalHeaderLabels(["Date", "Feature"])
             self.scaled_table.setRowCount(0)
             logger.error('Unable to create Scaled Residuals table')
         else:
-            headers = data.columns.tolist() if isinstance(data, pd.DataFrame) else ["Date", "Feature"]
+            if data is not None and not update:
+                self.residual_df = data
+            data = self.residual_df.copy()
+            data.insert(0, "Date", data.index)
+            headers = data.columns.tolist()
+            abs_threshold = float(self.threshold_input.text())
+            data = data[data[headers[-1]].abs() > abs_threshold]
+
             self.scaled_table.setColumnCount(len(headers))
             self.scaled_table.setHorizontalHeaderLabels(headers)
             self.scaled_table.setRowCount(len(data))
@@ -123,7 +152,6 @@ class ResidualAnalysisSubTab(QWidget):
             self.scaled_table.horizontalHeader().setStretchLastSection(True)
 
     def create_histogram_plot(self, fig=None, html=None):
-        logger.info(f"[ResidualAnalysisSubTab] Creating histogram plot with fig: {type(fig)} and html: {type(html)}")
         logger.info("[ResidualAnalysisSubTab] Creating histogram plot.")
         feature_idx = self.feature_table.currentRow() if self.feature_table.currentRow() >= 0 else 0
         if fig is None:
@@ -135,8 +163,10 @@ class ResidualAnalysisSubTab(QWidget):
                 fig = None
                 html = ""
         if fig is not None:
-            fig.update_layout(title=dict(font=dict(size=12), x=0.5, xanchor="center"), width=None, height=None,
-                              autosize=True, margin=dict(l=5, r=5, t=30, b=5))
+            fig.update_layout(
+                title=dict(font=dict(size=13)),
+                width=None, height=None,
+                autosize=True, margin=dict(l=5, r=5, t=30, b=5))
             html = fig.to_html(full_html=False, include_plotlyjs='cdn',
                                config={'responsive': True, 'displayModeBar': 'hover'})
 
@@ -200,12 +230,12 @@ class ResidualAnalysisSubTab(QWidget):
         Slot to update the residuals metrics table when residual metrics are ready.
         """
         # Example: feature_metrics should be a dict or list of dicts with headers and data
-        columns = ["Features", "Input Mean", "Input Var", "Est Mean", "Est Var", "RMSE"]
-        # extract specified columns from dataframe
+        columns = ["Feature", "Input Mean", "Input Var", "Est Mean", "Est Var", "RMSE"]
         try:
             logger.info("[ResidualAnalysis SubTab] Residual Metrics ready, updating table.")
             model_metrics = self.controller.main_controller.selected_modelanalysis_manager.analysis.residual_metrics
             self.set_statistics_table(columns, model_metrics)
+
         except Exception as e:
             logger.error("Residual Metrics not available in the analysis.")
             logger.error(f"Error updating residual metrics table: {e}")
@@ -215,40 +245,26 @@ class ResidualAnalysisSubTab(QWidget):
         Call this when the subtab is activated to ensure the table and plots are updated.
         If analysis results are available, update directly. Otherwise, trigger analysis.
         """
-        manager = self.controller.main_controller.selected_modelanalysis_manager
-        if manager is None or manager.analysis is None:
-            logger.info("No analysis available, triggering model analysis.")
-            # Attempt to trigger model analysis for the current dataset/model
-            dataset_name = getattr(self.controller.main_controller, 'current_dataset', None)
-            model_idx = getattr(self.controller.main_controller, 'current_model_idx', 0)
-            if dataset_name is not None:
-                self.controller.main_controller.run_model_analysis(dataset_name, model_idx)
-            else:
-                logger.warning("No dataset/model index available to trigger model analysis.")
-            return
-        logger.info("Analysis available, updating table and plots.")
-        self.on_residual_metrics_ready()
+        logger.info("Refreshing Residual Analysis SubTab on activation.")
+        if not self.stats_table_created:
+            logger.info("Creating statistics table for Residual Analysis SubTab.")
+            self.on_residual_metrics_ready()
+            self.stats_table_created = True
         self.update_plots()
 
     def update_plots(self, feature_idx: int = None):
         """
         Update the plots based on the selected feature index.
         """
+        logger.info("Updating plots in Residual Analysis SubTab.")
         if self.controller.main_controller.selected_modelanalysis_manager is None:
             logger.warning("No model analysis manager available.")
             return
-        feature_idx = feature_idx if feature_idx is not None else self.feature_table.currentRow()
 
         toggle_loader(self.plot_stack, self.histogram_movie, True)
-
-        # Do NOT reconnect signals here to avoid duplicate connections
-        if not self.plots_connected:
-            self.controller.main_controller.selected_modelanalysis_manager.residualHistogramReady.connect(self.create_histogram_plot)
-            self.plots_connected = True
-        self.controller.main_controller.selected_modelanalysis_manager.run_residual_histogram(feature_idx=feature_idx)
+        self.create_histogram_plot()
 
     def update_plots_on_row_click(self):
         feature_idx = self.feature_table.currentRow()
         if feature_idx >= 0:
-            self.update_plots(feature_idx=feature_idx)
-
+            self.controller.main_controller.selected_modelanalysis_manager.run_residual_histogram(feature_idx=feature_idx)

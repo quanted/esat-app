@@ -32,8 +32,18 @@ class ModelAnalysisTab(QWidget):
         self.residual_analysis_tab = ResidualAnalysisSubTab(parent=self, controller=self.controller, webviews={
             'residual_histogram': self.webviews["residual_histogram"],
         })
-        self.factor_analysis_tab = FactorAnalysisSubTab(parent=self, controller=self.controller)
-        self.factor_summary_tab = FactorSummarySubTab(parent=self, controller=self.controller)
+        self.factor_analysis_tab = FactorAnalysisSubTab(parent=self, controller=self.controller,
+                                                        webviews={
+                                                            'profile_plot': self.webviews["profile_plot"],
+                                                            'contrib_plot': self.webviews["contrib_plot"],
+                                                            'factor_fingerprints': self.webviews["factor_fingerprints"],
+                                                            'g_plot': self.webviews["g_plot"]
+                                                        })
+        self.factor_summary_tab = FactorSummarySubTab(parent=self, controller=self.controller,
+                                                      webviews={
+                                                          'factor_profiles': self.webviews["factor_profiles"],
+                                                            'factor_contributions': self.webviews["factor_contributions"],
+                                                      })
         self.subtabs.addTab(self.feature_analysis_tab, "Feature Analysis")
         self.subtabs.addTab(self.residual_analysis_tab, "Residual Analysis")
         self.subtabs.addTab(self.factor_analysis_tab, "Factor Analysis")
@@ -43,3 +53,4 @@ class ModelAnalysisTab(QWidget):
     def reattach_webviews(self):
         self.feature_analysis_tab.reattach_webviews()
         self.residual_analysis_tab.reattach_webviews()
+        self.factor_analysis_tab.reattach_webviews()

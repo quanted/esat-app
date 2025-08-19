@@ -49,10 +49,12 @@ class ModelView(QWidget):
             'obs_pred_scatter': self.webviews[3],
             'obs_pred_ts': self.webviews[4],
             'residual_histogram': self.webviews[5],
-            'profile_contrib_plot': self.webviews[6],
-            'factor_fingerprints': self.webviews[7],
-            'g_plot': self.webviews[8],
-            'factor_contribution': self.webviews[9],
+            'profile_plot': self.webviews[6],
+            'contrib_plot': self.webviews[7],
+            'factor_fingerprints': self.webviews[8],
+            'g_plot': self.webviews[9],
+            'factor_profiles': self.webviews[10],
+            'factor_contributions': self.webviews[11],
         }
 
         self._setup_ui()
@@ -101,6 +103,16 @@ class ModelView(QWidget):
         self.dataset_selection_widget.dataset_selected.connect(self._on_dataset_changed)
         self.controller.main_controller.modelstats_finished.connect(self._update_modelanalysis_tab)
         self.controller.main_controller.modelresiduals_finished.connect(self._update_residualanalysis_tab)
+
+        self.controller.main_controller.factor_profile_contrib_finished.connect(self.modelanalysis_tab.factor_analysis_tab.refresh_profile_plot)
+        self.controller.main_controller.factor_fingerprints_finished.connect(self.modelanalysis_tab.factor_analysis_tab.refresh_fingerprints_plot)
+        self.controller.main_controller.factor_gplot_finished.connect(self.modelanalysis_tab.factor_analysis_tab.refresh_g_plot)
+
+        self.controller.main_controller.batchanalysis_finished.connect(self._update_factoranalysis_tab)
+
+        self.controller.main_controller.modelstats_finished.connect(self._update_factorsummary_table)
+        self.controller.main_controller.factors_contributions_finished.connect(self._update_factorsummary_plots)
+
 
     def _create_model_selected_widget(self):
         group_box = QGroupBox("Model Selection")
@@ -219,12 +231,6 @@ class ModelView(QWidget):
             dataset_name = self.dataset_selection_widget.selected_dataset
             self.model_dataset_label.setText(dataset_name if dataset_name else "-")
 
-            # # Trigger plot updates
-            # if self.controller.main_controller.selected_modelanalysis_manager:
-            #     logger.info(f"[ModelView] Updating model analysis plots for dataset '{dataset}', model index {index}")
-            #     self.modelanalysis_tab.feature_analysis_tab.plots_connected = False
-            #     self.modelanalysis_tab.feature_analysis_tab.on_feature_metrics_ready()
-            #     self.modelanalysis_tab.feature_analysis_tab.update_plots(feature_idx=0)
         else:
             for label in self.model_details_labels.values():
                 label.setText("-")
@@ -236,6 +242,19 @@ class ModelView(QWidget):
         logger.info(f"[ModelView] Model changed to index {index} for dataset '{dataset}'")
         self.controller.main_controller.run_model_analysis(dataset_name=dataset, model_idx=index)
 
+        self.modelanalysis_tab.residual_analysis_tab.plots_connected = False
+        self.modelanalysis_tab.residual_analysis_tab.stats_table_created = False
+
+        self.modelanalysis_tab.factor_analysis_tab.factor_dropdown.blockSignals(True)
+        self.modelanalysis_tab.factor_analysis_tab.factor_dropdown.setCurrentIndex(0)
+        self.modelanalysis_tab.factor_analysis_tab.factor_dropdown.blockSignals(False)
+
+        self.modelanalysis_tab.factor_analysis_tab.g_x_dropdown.blockSignals(True)
+        self.modelanalysis_tab.factor_analysis_tab.g_x_dropdown.setCurrentIndex(0)
+        self.modelanalysis_tab.factor_analysis_tab.g_x_dropdown.blockSignals(False)
+        self.modelanalysis_tab.factor_analysis_tab.g_y_dropdown.blockSignals(True)
+        self.modelanalysis_tab.factor_analysis_tab.g_y_dropdown.setCurrentIndex(1)
+        self.modelanalysis_tab.factor_analysis_tab.g_y_dropdown.blockSignals(False)
 
     def _setup_tabs(self):
         # Create and set up the main tabs for the ModelView
@@ -255,7 +274,7 @@ class ModelView(QWidget):
         self.modelanalysis_tab = ModelAnalysisTab(parent=self, controller=self.controller, webviews=self.model_analysis_plots)
         self.tabs.addTab(self.modelanalysis_tab, "Model Analysis")
 
-        self.tabs.addTab(self._setup_factoranalysis_tab(), "Factor Analysis")
+        self.tabs.addTab(self._setup_factorcatalog_tab(), "Factor Catalog")
 
     def reattach_webviews(self):
         """
@@ -295,10 +314,10 @@ class ModelView(QWidget):
         layout.addWidget(self.modelanalysis_subtabs)
         return self.modelanalysis_tab
 
-    def _setup_factoranalysis_tab(self):
+    def _setup_factorcatalog_tab(self):
         self.factoranalysis_tab = QWidget()
         self.factoranalysis_layout = QVBoxLayout(self.factoranalysis_tab)
-        self.factoranalysis_placeholder = QLabel("No models available")
+        self.factoranalysis_placeholder = QLabel("No batches available to analyze.")
         self.factoranalysis_layout.addWidget(self.factoranalysis_placeholder)
         return self.factoranalysis_tab
 
@@ -314,9 +333,21 @@ class ModelView(QWidget):
 
     def _update_residualanalysis_tab(self):
         logger.info(f"[ModelView] Updating Residual Analysis tab with new data")
-        self.modelanalysis_tab.residual_analysis_tab.plots_connected = False
         self.modelanalysis_tab.residual_analysis_tab.refresh_on_activate()
 
-    def _update_factoranalysis_tab(self, data):
+    def _update_factoranalysis_tab(self):
         # Update the Factor Analysis tab with new data
-        self.factoranalysis_placeholder.setText(f"Factor Analysis loaded: {len(data)} items")
+        logger.info(f"[ModelView] Updating Factor Analysis tab with new data")
+        # Populate factor dropdown with available factors
+        manager = self.controller.main_controller.selected_modelanalysis_manager
+        if manager and hasattr(manager, 'sa') and hasattr(manager.sa, 'factors'):
+            n_factors = manager.sa.factors
+            self.modelanalysis_tab.factor_analysis_tab.populate_factors(list(range(1, n_factors + 1)))
+
+    def _update_factorsummary_table(self):
+        logger.info(f"[ModelView] Updating Factor Summary table with new data")
+        self.modelanalysis_tab.factor_summary_tab.update_table()
+
+    def _update_factorsummary_plots(self):
+        logger.info(f"[ModelView] Updating Factor Summary plots with new data")
+        self.modelanalysis_tab.factor_summary_tab.update_plots()
