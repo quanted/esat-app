@@ -59,7 +59,7 @@ class BatchAnalysisTab(QWidget):
             else:
                 batchanalysis_manager = batch_analysis_dict[dataset_name]
                 fig = batchanalysis_manager.loss_plot
-                fig.update_layout(title=dict(font=dict(size=13), x=0.5, xanchor="center"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
+                fig.update_layout(title=dict(font=dict(size=14), x=0.5, xanchor="center"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
                 html = fig.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
         def hide_spinner(_ok):
             toggle_loader(self.loss_stack, self.batchloss_movie, False)
@@ -80,7 +80,7 @@ class BatchAnalysisTab(QWidget):
             else:
                 batchanalysis_manager = batch_analysis_dict[dataset_name]
                 fig = batchanalysis_manager.loss_distribution_plot
-                fig.update_layout(title=dict(font=dict(size=13), x=0.5, xanchor="center"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
+                fig.update_layout(title=dict(font=dict(size=14), x=0.5, xanchor="center"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
                 html = fig.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
         def hide_spinner(_ok):
             toggle_loader(self.dist_stack, self.batchdist_movie, False)
@@ -105,7 +105,7 @@ class BatchAnalysisTab(QWidget):
                 batchanalysis_manager = batch_analysis_dict[dataset_name]
                 if feature_list:
                     fig = batchanalysis_manager.temporal_residual_plot
-                    fig.update_layout(title=dict(dict(size=13), x=0.5, xanchor="center", text=f"Model Residual - Feature {feature_list[0]}"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
+                    fig.update_layout(title=dict(font=dict(size=14), x=0.5, xanchor="center", text=f"Model Residual - Feature {feature_list[0]}"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
                     html = fig.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
                     def on_feature_changed(index):
                         toggle_loader(self.residual_stack, self.batchresiduals_movie, True)
@@ -162,7 +162,7 @@ class BatchAnalysisTab(QWidget):
         for view_name, webview in self.webviews.items():
             webview.setHtml("")  # Clear content
             webview.setParent(None)
-            webview.setMinimumSize(200, 200)
+            webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             QApplication.processEvents()

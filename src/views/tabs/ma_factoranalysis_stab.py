@@ -53,6 +53,7 @@ class FactorAnalysisSubTab(QWidget):
         self.factor_dropdown.currentIndexChanged.connect(self._on_factor_selected)
         factor_select_layout.addWidget(self.factor_dropdown)
         self.show_all_profiles_btn = QPushButton('Show All Profiles')
+        self.show_all_profiles_btn.setStyleSheet("padding: 4px 12px;")
         self.show_all_profiles_btn.clicked.connect(self._on_show_all_profiles)
         factor_select_layout.addWidget(self.show_all_profiles_btn)
         left_layout.addLayout(factor_select_layout)
@@ -134,7 +135,7 @@ class FactorAnalysisSubTab(QWidget):
             logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
             webview.setParent(None)
-            webview.setMinimumSize(200, 200)
+            webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             QApplication.processEvents()
@@ -191,11 +192,11 @@ class FactorAnalysisSubTab(QWidget):
 
         if profile_fig is not None:
             profile_fig.update_layout(
-                title=dict(font=dict(size=13), x=0.5, xanchor="center"),
+                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
                 width=None, height=None,
                 autosize=True, margin=dict(l=5, r=5, t=30, b=5),
                 legend=dict(
-                    x=1.04, y=1.14, xanchor='right', yanchor='top',
+                    x=1.06, y=1.14, xanchor='right', yanchor='top',
                     orientation='h',
                     valign='top',
                     font=dict(size=10),
@@ -231,7 +232,7 @@ class FactorAnalysisSubTab(QWidget):
 
         if contrib_fig is not None:
             contrib_fig.update_layout(
-                title=dict(font=dict(size=13), x=0.5, xanchor="center"),
+                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
                 width=None, height=None,
                 autosize=True, margin=dict(l=5, r=5, t=30, b=5)
             )
@@ -260,7 +261,7 @@ class FactorAnalysisSubTab(QWidget):
 
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=13), x=0.5, xanchor="center"),
+                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
                 width=None, height=None,
                 autosize=True, margin=dict(l=5, r=5, t=30, b=5)
             )
@@ -294,7 +295,7 @@ class FactorAnalysisSubTab(QWidget):
 
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=13), x=0.5, xanchor="center"),
+                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
                 width=None, height=None,
                 autosize=True, margin=dict(l=5, r=5, t=30, b=5))
             html = fig.to_html(full_html=False, include_plotlyjs='cdn',
@@ -359,6 +360,8 @@ class FactorAnalysisSubTab(QWidget):
             manager.allfactorProfileReady.disconnect(self._create_all_profiles_dialog)
         except Exception:
             pass
+        num_factors = manager.sa.factors
+        selected_model = manager.model_idx
         dialog = QDialog(self)
         dialog.setWindowTitle('All Factor Profiles')
         # Add minimize and maximize buttons to the dialog window
@@ -371,11 +374,61 @@ class FactorAnalysisSubTab(QWidget):
         from PySide6.QtWebEngineWidgets import QWebEngineView
         webview = QWebEngineView(dialog)
         if plot is not None:
+            annotations = [
+                dict(
+                    text="Conc. of Features",
+                    x=-0.07,  # adjust as needed
+                    y=0.5,
+                    xref="paper", yref="paper",
+                    textangle=-90,
+                    font=dict(size=14),
+                    showarrow=False,
+                    align="center"
+                ),
+                dict(
+                    text="% of Features",
+                    x=1.01,  # adjust as needed
+                    y=0.5,
+                    xref="paper", yref="paper",
+                    textangle=-90,
+                    font=dict(size=14),
+                    showarrow=False,
+                    align="center"
+                )
+            ]
+            #TODO: labeling bug where the y subplot labels overlap
+            for i in range(num_factors):
+                xref = "x domain"
+                if i == 0:
+                    yref = "y domain"
+                else:
+                    yref = f"y{i} domain"
+                annotations.append(dict(
+                    text=f"Factor {i + 1}",
+                    x=0.5,
+                    y=.99,
+                    xref=xref,
+                    yref=yref,
+                    xanchor="center",
+                    yanchor="bottom",
+                    showarrow=False,
+                    font=dict(size=13)
+                ))
+
             plot.update_layout(
+                title=dict(font=dict(size=15), x=0.5, xanchor="center"),
                 width=None,
                 height=None,
                 autosize=True,
-                # margin=dict(l=5, r=5, t=30, b=5)
+                margin=dict(l=60, r=50, t=50, b=5),
+                legend=dict(
+                    x=1.0, y=1.04, xanchor='right', yanchor='top',
+                    orientation='h',
+                    valign='top',
+                    font=dict(size=10),
+                    bgcolor='rgba(0,0,0,0)'
+                ),
+                annotations=annotations
             )
             if hasattr(plot, 'to_html'):
                 html = plot.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})

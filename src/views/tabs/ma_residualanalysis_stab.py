@@ -164,7 +164,7 @@ class ResidualAnalysisSubTab(QWidget):
                 html = ""
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=13)),
+                title=dict(font=dict(size=14)),
                 width=None, height=None,
                 autosize=True, margin=dict(l=5, r=5, t=30, b=5))
             html = fig.to_html(full_html=False, include_plotlyjs='cdn',
@@ -190,7 +190,7 @@ class ResidualAnalysisSubTab(QWidget):
             logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
             webview.setParent(None)
-            webview.setMinimumSize(200, 200)
+            webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             QApplication.processEvents()

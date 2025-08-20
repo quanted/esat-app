@@ -94,7 +94,7 @@ class FactorSummarySubTab(QWidget):
             logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
             webview.setParent(None)
-            webview.setMinimumSize(200, 200)
+            webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             QApplication.processEvents()
@@ -145,7 +145,7 @@ class FactorSummarySubTab(QWidget):
                 html = ""
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=13), x=0.5, xanchor="center"),
+                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
                 width=None, height=None,
                 autosize=True, margin=dict(l=5, r=5, t=30, b=5))
             html = fig.to_html(full_html=False, include_plotlyjs='cdn',
@@ -175,7 +175,7 @@ class FactorSummarySubTab(QWidget):
 
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=13), x=0.04),
+                title=dict(font=dict(size=14), x=0.04),
                 width=None,
                 height=None,
                 autosize=True,

@@ -107,8 +107,20 @@ class FeatureAnalysisSubTab(QWidget):
                 fig = None
                 html = ""
         if fig is not None:
-            fig.update_layout(title=dict(font=dict(size=13), x=0.5, xanchor="center"), width=None, height=None,
-                              autosize=True, margin=dict(l=5, r=5, t=30, b=5))
+            fig.update_layout(
+                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
+                width=None,
+                height=None,
+                autosize=True,
+                margin=dict(l=5, r=5, t=50, b=5),
+                legend=dict(
+                    x=0.5, y=1.07, xanchor='center', yanchor='top',
+                    orientation='h',
+                    valign='top',
+                    font=dict(size=10),
+                    bgcolor='rgba(0,0,0,0)'
+                ),
+            )
             html = fig.to_html(full_html=False, include_plotlyjs='cdn',
                                config={'responsive': True, 'displayModeBar': 'hover'})
 
@@ -137,11 +149,18 @@ class FeatureAnalysisSubTab(QWidget):
 
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=13), x=0.5, xanchor="center"),
+                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
                 width=None,
                 height=None,
                 autosize=True,
-                margin=dict(l=5, r=5, t=30, b=5)
+                margin=dict(l=5, r=5, t=50, b=5),
+                legend=dict(
+                    x=0.5, y=1.07, xanchor='center', yanchor='top',
+                    orientation='h',
+                    valign='top',
+                    font=dict(size=10),
+                    bgcolor='rgba(0,0,0,0)'
+                ),
             )
             html = fig.to_html(full_html=False, include_plotlyjs='cdn',
                                config={'responsive': True, 'displayModeBar': 'hover'})
@@ -166,7 +185,7 @@ class FeatureAnalysisSubTab(QWidget):
             logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
             webview.setParent(None)
-            webview.setMinimumSize(200, 200)
+            webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             QApplication.processEvents()
@@ -276,7 +295,7 @@ class FeatureAnalysisSubTab(QWidget):
         Ensure the table and plots are updated when the subtab is shown/activated.
         """
         super().showEvent(event)
-        self.refresh_on_activate()
+        # self.refresh_on_activate()
         self.table.itemSelectionChanged.connect(self.update_plots_on_row_click)
 
     def update_plots_on_row_click(self):
