@@ -1,9 +1,13 @@
+import os
 import logging
 import pandas as pd
-from PySide6.QtWidgets import QWidget, QHBoxLayout,  QGroupBox, QVBoxLayout, QLabel, QSizePolicy, QApplication, QTableWidget, QTableWidgetItem, QSplitter
+from PySide6.QtWidgets import (QWidget, QHBoxLayout,  QGroupBox, QVBoxLayout, QLabel, QSizePolicy, QApplication,
+                               QTableWidget, QTableWidgetItem, QSplitter, QFileDialog)
 from PySide6.QtCore import Qt
+from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 
 from src.utils import create_loader, toggle_loader, create_plot_container
+from src.utils.optimization import create_optimized_plotly_html
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -67,6 +71,46 @@ class FeatureAnalysisSubTab(QWidget):
             logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
+            self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
+
+    def setup_webview_downloads(self, view_name, webview):
+        """Enable download functionality for webviews."""
+        if hasattr(webview, 'page'):
+            profile = webview.page().profile()
+            try:
+                profile.downloadRequested.disconnect()
+            except Exception:
+                pass
+            profile.downloadRequested.connect(lambda download: self.handle_download(download, view_name))
+
+    def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
+        """Handle download requests from webview."""
+        suggested_filename = download.suggestedFileName()
+        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        # Generate filename based on webview type
+        feature_idx = self.table.currentRow() if self.table.currentRow() >= 0 else 0
+        feature_name = self.table.item(feature_idx, 0).text() if self.table.item(feature_idx, 0) else f"feature_{feature_idx}"
+        feature_name = feature_name.replace(" ", "_").replace("/", "_")
+        model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
+        plot_view = "obs-pred" if "scatter" in suggested_filename else "est-ts"
+        project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
+        plot_dir = os.path.join(project_dir, "plots")
+        os.makedirs(plot_dir, exist_ok=True)
+        suggested_filename = os.path.join(f"{plot_dir}",f"{plot_view}_m{model_id}_{feature_name}.png")
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Plot",
+            suggested_filename,
+            "PNG files (*.png);;SVG files (*.svg);;HTML files (*.html);;All files (*.*)"
+        )
+
+        if filename:
+            download.setDownloadFileName(filename)
+            download.accept()
+            logger.info(f"Plot download started: {filename}")
+        else:
+            download.cancel()
 
     def set_statistics_table(self, headers, data: pd.DataFrame):
         if data is None:
@@ -108,21 +152,15 @@ class FeatureAnalysisSubTab(QWidget):
                 html = ""
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
-                width=None,
-                height=None,
-                autosize=True,
-                margin=dict(l=5, r=5, t=50, b=5),
                 legend=dict(
-                    x=0.5, y=1.07, xanchor='center', yanchor='top',
+                    x=0.5, y=1.09, xanchor='center', yanchor='top',
                     orientation='h',
                     valign='top',
                     font=dict(size=10),
                     bgcolor='rgba(0,0,0,0)'
                 ),
             )
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
 
         def hide_spinner(_ok):
             toggle_loader(self.plot_stacks[0], self.scatterplot_movie, False)
@@ -136,8 +174,6 @@ class FeatureAnalysisSubTab(QWidget):
 
     def create_ts_plot(self, fig=None, html=None):
         logger.info(f"[FeatureAnalysis SubTab] Creating time series plot.")
-        # logger.info(f"[FeatureAnalysis SubTab] create_ts_plot -  fig: {fig}, html: {html}")
-
         feature_idx = self.table.currentRow() if self.table.currentRow() >= 0 else 0
         if fig is None:
             try:
@@ -149,21 +185,15 @@ class FeatureAnalysisSubTab(QWidget):
 
         if fig is not None:
             fig.update_layout(
-                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
-                width=None,
-                height=None,
-                autosize=True,
-                margin=dict(l=5, r=5, t=50, b=5),
                 legend=dict(
-                    x=0.5, y=1.07, xanchor='center', yanchor='top',
+                    x=0.5, y=1.09, xanchor='center', yanchor='top',
                     orientation='h',
                     valign='top',
                     font=dict(size=10),
                     bgcolor='rgba(0,0,0,0)'
                 ),
             )
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
 
         def hide_spinner(_ok):
             toggle_loader(self.plot_stacks[1], self.tsplot_movie, False)

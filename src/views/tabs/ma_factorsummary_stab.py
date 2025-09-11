@@ -1,10 +1,14 @@
+import os
 import logging
 import pandas as pd
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QHBoxLayout, QTableWidget, QTableWidgetItem, QSplitter,
-                               QSizePolicy, QGroupBox, QApplication)
+                               QSizePolicy, QGroupBox, QApplication, QFileDialog)
+from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 from PySide6.QtCore import Qt
+from numpy.ma.core import left_shift
 
 from src.utils import create_loader, toggle_loader, create_plot_container
+from src.utils.optimization import create_optimized_plotly_html
 
 
 logging.basicConfig(level=logging.INFO)
@@ -67,9 +71,9 @@ class FactorSummarySubTab(QWidget):
         right_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         splitter.addWidget(right_splitter)
 
-        # Set stretch: left 20%, right 80%
-        splitter.setStretchFactor(0, 2)
-        splitter.setStretchFactor(1, 5)
+        # Set stretch: left 15%, right 85%
+        splitter.setStretchFactor(0, 15)
+        splitter.setStretchFactor(1, 85)
         main_layout.addWidget(splitter)
 
     def _on_feature_selected(self, item):
@@ -83,6 +87,47 @@ class FactorSummarySubTab(QWidget):
             logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
+            self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
+
+    def setup_webview_downloads(self, view_name, webview):
+        """Enable download functionality for webviews."""
+        if hasattr(webview, 'page'):
+            profile = webview.page().profile()
+            try:
+                profile.downloadRequested.disconnect()
+            except Exception:
+                pass
+            profile.downloadRequested.connect(lambda download: self.handle_download(download, view_name))
+
+    def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
+        """Handle download requests from webview."""
+        suggested_filename = download.suggestedFileName()
+        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        # Generate filename based on webview type
+        model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
+        project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
+        plot_dir = os.path.join(project_dir, "plots")
+        os.makedirs(plot_dir, exist_ok=True)
+        if webview_name in ['factor_profiles', 'factor_contributions']:
+            feature_idx = self.feature_table.currentRow() if self.feature_table.currentRow() >= 0 else 0
+            feature_label = self.feature_table.item(feature_idx, 0).text() if self.feature_table.item(feature_idx, 0) else f"feature{feature_idx}"
+            suggested_filename = os.path.join(f"{plot_dir}", f"{webview_name}_{feature_label}_m{model_id}.png")
+        else:
+            suggested_filename = os.path.join(f"{plot_dir}", suggested_filename or f"plot_m{model_id}.png")
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Plot",
+            suggested_filename,
+            "PNG files (*.png);;SVG files (*.svg);;HTML files (*.html);;All files (*.*)"
+        )
+
+        if filename:
+            download.setDownloadFileName(filename)
+            download.accept()
+            logger.info(f"Plot download started: {filename}")
+        else:
+            download.cancel()
 
     def reattach_webviews(self):
         """
@@ -144,12 +189,7 @@ class FactorSummarySubTab(QWidget):
                 fig = None
                 html = ""
         if fig is not None:
-            fig.update_layout(
-                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
-                width=None, height=None,
-                autosize=True, margin=dict(l=5, r=5, t=30, b=5))
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            html = create_optimized_plotly_html(fig, x=0.5)
 
         def hide_spinner(_ok):
             toggle_loader(self.plot_stacks[0], self.profile_movie, False)
@@ -174,15 +214,10 @@ class FactorSummarySubTab(QWidget):
                 html = ""
 
         if fig is not None:
-            fig.update_layout(
-                title=dict(font=dict(size=14), x=0.04),
-                width=None,
-                height=None,
-                autosize=True,
-                margin=dict(l=5, r=5, t=30, b=5)
-            )
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            feature_label = self.feature_table.item(feature_idx, 0).text()
+            fig_title = fig.layout.title.text + f" Feature: {feature_label}" if feature_label not in fig.layout.title.text else fig.layout.title.text
+            fig.update_layout(title_text=fig_title)
+            html = create_optimized_plotly_html(fig, xanchor='center', x=0.5)
 
         def hide_spinner(_ok):
             toggle_loader(self.plot_stacks[1], self.contrib_movie, False)
@@ -215,6 +250,7 @@ class FactorSummarySubTab(QWidget):
                         value = round(value, 3)
                     item = QTableWidgetItem(str(value))
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    item.setTextAlignment(Qt.AlignCenter)
                     self.feature_table.setItem(row_idx, col_idx, item)
             if len(data) > 0:
                 self.feature_table.selectRow(0)
@@ -222,7 +258,7 @@ class FactorSummarySubTab(QWidget):
             self.feature_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             self.feature_table.resizeColumnsToContents()
             self.feature_table.resizeRowsToContents()
-            self.feature_table.horizontalHeader().setStretchLastSection(True)
+            self.feature_table.horizontalHeader().setStretchLastSection(False)
 
     def update_plots(self):
         if self.controller.main_controller.selected_modelanalysis_manager is None:
@@ -234,3 +270,10 @@ class FactorSummarySubTab(QWidget):
 
         self.create_profiles_plot()
         self.create_contribs_plot()
+
+        splitter = self.findChild(QSplitter)
+        total_width = splitter.width()
+        left_width = int(total_width * 0.15)
+        right_width = total_width - left_width
+        splitter.setSizes([left_width, right_width])
+        QApplication.processEvents()

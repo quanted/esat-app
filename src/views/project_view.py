@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt
 
+from src.models import Project, Dataset
+
 
 class LoadingDialog(QDialog):
     def __init__(self, message, parent=None):
@@ -31,10 +33,10 @@ class ProjectView(QWidget):
         self.parent = parent
         self.controller = controller
 
-        self.setup_ui()
+        self._setup_ui()
         self.setup_default_project() # For testing purposes, set default paths
 
-    def setup_ui(self):
+    def _setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setAlignment(Qt.AlignTop)
 
@@ -301,7 +303,7 @@ class ProjectView(QWidget):
         self.datasets_area.addWidget(group_box)
 
         def add_dataset():
-            "Add a new dataset to the DataManager"
+            """Add a new dataset to the DataManager"""
             self.add_dataset(
                 name=name_edit.text().strip(),
                 data_file_path=data_path_edit.text().strip(),
@@ -318,7 +320,7 @@ class ProjectView(QWidget):
             self.add_dataset_row()
 
         def remove_dataset():
-            "Remove the current dataset row"
+            """Remove the current dataset row"""
             self.remove_dataset(name=name_edit.text().strip())
             group_box.setParent(None)
             group_box.deleteLater()
@@ -366,6 +368,18 @@ class ProjectView(QWidget):
                 location_ids=location_ids,
                 missing_value_label=missing_value_label
             )
+            dataset = Dataset(
+                name=name,
+                data_file_path=data_file_path,
+                uncertainty_file_path=uncertainty_file_path,
+                index_column=index_column,
+                location_ids=location_ids,
+                missing_value_label=missing_value_label,
+                latitude=None,
+                longitude=None, location_label=None
+            )
+            project = Project(name=self.project_name_edit.text(), description=None, datasets=[], output_directory=self.project_dir_edit.text())
+            self.controller.main_controller.set_project(project=project, dataset=dataset)
             self.parent.statusBar().showMessage(f"Dataset '{name}' added successfully.", 3000)
         except ValueError:
             QMessageBox.critical(self, "Error", f"Dataset with name '{name}' already exists.")

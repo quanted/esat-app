@@ -24,8 +24,9 @@ def create_loader(loader_size=64):
     layout.addStretch()
     return container, movie
 
-def toggle_loader(stack, movie, show):
+def toggle_loader(stack, movie, show, speed=500):
     if show:
+        movie.setSpeed(speed)
         movie.start()
         stack.setCurrentIndex(1)
     else:

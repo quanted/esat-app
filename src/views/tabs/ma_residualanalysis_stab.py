@@ -1,11 +1,14 @@
+import os
 import logging
 import pandas as pd
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QGroupBox, QVBoxLayout, QLabel, QSizePolicy, QTableWidget,
-                               QSplitter, QTableWidgetItem, QApplication, QLineEdit)
+                               QSplitter, QTableWidgetItem, QApplication, QLineEdit, QFileDialog)
+from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 from PySide6.QtGui import QDoubleValidator
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from src.utils import create_loader, toggle_loader, create_plot_container
+from src.utils.optimization import create_optimized_plotly_html
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -76,8 +79,8 @@ class ResidualAnalysisSubTab(QWidget):
         splitter.addWidget(right_group)
 
         splitter.setStretchFactor(0, 30)
-        splitter.setStretchFactor(1, 45)
-        splitter.setStretchFactor(2, 25)
+        splitter.setStretchFactor(1, 55)
+        splitter.setStretchFactor(2, 15)
 
         main_layout.addWidget(splitter)
 
@@ -87,6 +90,87 @@ class ResidualAnalysisSubTab(QWidget):
             logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
+            self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
+
+    def setup_webview_downloads(self, view_name, webview):
+        """Enable download functionality for webviews."""
+        if hasattr(webview, 'page'):
+            profile = webview.page().profile()
+            try:
+                profile.downloadRequested.disconnect()
+            except Exception:
+                pass
+            profile.downloadRequested.connect(lambda download: self.handle_download(download, view_name))
+
+    def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
+        """Handle download requests from webview."""
+        suggested_filename = download.suggestedFileName()
+        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        # Generate filename based on webview type
+        model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
+        project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
+        plot_dir = os.path.join(project_dir, "plots")
+        os.makedirs(plot_dir, exist_ok=True)
+        feature_idx = self.feature_table.currentRow() if self.feature_table.currentRow() >= 0 else 0
+        feature_label = self.feature_table.item(feature_idx, 0).text() if self.feature_table.columnCount() > 0 and self.feature_table.rowCount() > feature_idx else f"feature{feature_idx}"
+        suggested_filename = os.path.join(f"{plot_dir}", suggested_filename or f"residual_distribution_{feature_label}_m{model_id}.png")
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Plot",
+            suggested_filename,
+            "PNG files (*.png);;SVG files (*.svg);;HTML files (*.html);;All files (*.*)"
+        )
+
+        if filename:
+            download.setDownloadFileName(filename)
+            download.accept()
+            logger.info(f"Plot download started: {filename}")
+        else:
+            download.cancel()
+
+    def _fit_splitter_to_content(self):
+        """Set splitter sizes based on table content widths."""
+        splitter = self.findChild(QSplitter)
+        if not splitter:
+            return
+
+        total_width = splitter.width()
+
+        # Don't try to resize if splitter doesn't have proper width yet
+        if total_width <= 100:
+            QTimer.singleShot(100, self._fit_splitter_to_content)
+            return
+
+        # Calculate actual content widths
+        left_width = 0
+        right_width = 0
+
+        # Get left table content width
+        if self.feature_table.columnCount() > 0:
+            left_width = sum(self.feature_table.columnWidth(i) for i in range(self.feature_table.columnCount()))
+            left_width += 40  # Add padding for margins
+
+        # Get right table content width
+        if self.scaled_table.columnCount() > 0:
+            right_width = sum(self.scaled_table.columnWidth(i) for i in range(self.scaled_table.columnCount()))
+            right_width += 40  # Add padding for margins
+
+        # Set minimum widths if tables are empty
+        left_width = max(left_width, 200)
+        right_width = max(right_width, 180)
+
+        # Calculate center width (remaining space)
+        center_width = max(total_width - left_width - right_width, 300)
+
+        # print(f"Fitting splitter: total={total_width}, left={left_width}, center={center_width}, right={right_width}")
+        splitter.setSizes([left_width, center_width, right_width])
+
+    def showEvent(self, event):
+        """Override showEvent to ensure proper splitter sizing when widget becomes visible."""
+        super().showEvent(event)
+        if self.stats_table_created:
+            QTimer.singleShot(100, self._fit_splitter_to_content)
 
     def set_statistics_table(self, headers, data: pd.DataFrame):
         if data is None:
@@ -106,6 +190,7 @@ class ResidualAnalysisSubTab(QWidget):
                         value = round(value, 3)
                     item = QTableWidgetItem(str(value))
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    item.setTextAlignment(Qt.AlignCenter)
                     self.feature_table.setItem(row_idx, col_idx, item)
             if len(data) > 0 and not self.stats_table_created:
                 print(f"Setting stats table to 0. Current row: {self.feature_table.currentRow()}. Created: {self.stats_table_created}")
@@ -114,8 +199,10 @@ class ResidualAnalysisSubTab(QWidget):
             self.feature_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             self.feature_table.resizeColumnsToContents()
             self.feature_table.resizeRowsToContents()
-            self.feature_table.horizontalHeader().setStretchLastSection(True)
+            self.feature_table.horizontalHeader().setStretchLastSection(False)
+
             self.stats_table_created = True
+            QTimer.singleShot(50, self._fit_splitter_to_content)
 
     def set_residuals_table(self, data: pd.DataFrame=None, update=False):
         if data is None and not update:
@@ -144,12 +231,16 @@ class ResidualAnalysisSubTab(QWidget):
                         value = round(value, 3)
                     item = QTableWidgetItem(str(value))
                     item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                    item.setTextAlignment(Qt.AlignCenter)
                     self.scaled_table.setItem(row_idx, col_idx, item)
             # Set table properties
             self.scaled_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             self.scaled_table.resizeColumnsToContents()
             self.scaled_table.resizeRowsToContents()
-            self.scaled_table.horizontalHeader().setStretchLastSection(True)
+            self.scaled_table.horizontalHeader().setStretchLastSection(False)
+
+            # Fit splitter after table is populated
+            QTimer.singleShot(50, self._fit_splitter_to_content)
 
     def create_histogram_plot(self, fig=None, html=None):
         logger.info("[ResidualAnalysisSubTab] Creating histogram plot.")
@@ -163,15 +254,12 @@ class ResidualAnalysisSubTab(QWidget):
                 fig = None
                 html = ""
         if fig is not None:
-            fig.update_layout(
-                title=dict(font=dict(size=14)),
-                width=None, height=None,
-                autosize=True, margin=dict(l=5, r=5, t=30, b=5))
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
 
         def hide_spinner(_ok):
             toggle_loader(self.plot_stack, self.histogram_movie, False)
+            QApplication.processEvents()  # Ensure layout is updated
+            QTimer.singleShot(500, self._fit_splitter_to_content)
             try:
                 self.webviews['residual_histogram'].loadFinished.disconnect(hide_spinner)
             except Exception:
@@ -185,45 +273,43 @@ class ResidualAnalysisSubTab(QWidget):
         Reattach shared webviews with cached HTML, ensuring correct layout and sizing.
         Also clears previous content and triggers plot update functions.
         """
-        # Detach all webviews
-        for view_name, webview in self.webviews.items():
-            logger.info(f"Reattaching webview: {view_name}")
-            webview.setHtml("")  # Clear content
-            webview.setParent(None)
-            webview.setMinimumSize(400, 400)
-            webview.setMaximumSize(16777215, 16777215)
-            webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            QApplication.processEvents()
+        # Detach the webview
+        webview = self.webviews['residual_histogram']
+        logger.info(f"Reattaching webview: residual_histogram")
+        webview.setHtml("")  # Clear content
+        webview.setParent(None)
+        webview.setMinimumSize(0, 0)  # Remove minimum size constraints
+        webview.setMaximumSize(16777215, 16777215)
+        webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        QApplication.processEvents()
 
-        for idx, view_name in enumerate(['residual_histogram']):
-            stack = self.plot_stack
-            webview = self.webviews[view_name]
+        # Remove all widgets from stack
+        while self.plot_stack.count():
+            self.plot_stack.removeWidget(self.plot_stack.widget(0))
 
-            # Remove all widgets from stack
-            while stack.count():
-                stack.removeWidget(stack.widget(0))
-            stack.addWidget(webview)
-            stack.addWidget(self.histogram_loading)
-            stack.setCurrentIndex(1)
+        # Re-add webview and loading widget
+        self.plot_stack.addWidget(webview)
+        self.plot_stack.addWidget(self.histogram_loading)
+        self.plot_stack.setCurrentIndex(0)  # Show webview by default
 
-            # Update parent container and layout
-            parent = stack.parentWidget()
-            if parent:
-                parent.resize(400, parent.height())
-                parent.adjustSize()
-                parent.updateGeometry()
-                parent.update()
-                if parent.layout():
-                    parent.layout().invalidate()
-                    parent.updateGeometry()
-                    parent.update()
-            webview.adjustSize()
-            webview.updateGeometry()
-            QApplication.processEvents()
+        # Ensure webview expands properly
+        webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        webview.setMinimumSize(0, 0)
 
-            # Always clear and trigger plot update
-            webview.setHtml("")
-            self.create_histogram_plot(html=self._webview_html_cache.get(view_name))
+        # Update parent container
+        parent = self.plot_stack.parentWidget()
+        if parent:
+            parent.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            parent.updateGeometry()
+            if parent.layout():
+                parent.layout().invalidate()
+                parent.layout().activate()
+
+        QApplication.processEvents()
+
+        # Clear and trigger plot update
+        webview.setHtml("")
+        self.create_histogram_plot(html=self._webview_html_cache.get('residual_histogram'))
 
     def on_residual_metrics_ready(self):
         """

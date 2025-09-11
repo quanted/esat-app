@@ -1,18 +1,18 @@
 import os
 import logging
 import pandas as pd
-import plotly.graph_objects as go
-from time import monotonic
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QGroupBox, QTabWidget, QTableWidget, QVBoxLayout, QComboBox, QLabel, QSizePolicy,
-    QTableWidgetItem, QStackedLayout, QHeaderView, QAbstractItemView, QPushButton, QDialog, QApplication
+    QTableWidgetItem, QStackedLayout, QHeaderView, QAbstractItemView, QPushButton, QDialog, QApplication, QFileDialog
 )
-from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 from PySide6.QtGui import QMovie
 from PySide6.QtCore import Qt, QSize, QTimer, QPoint
 
 from src.widgets.dataset_selection_widget import DatasetSelectionWidget
+from src.utils.optimization import create_optimized_plotly_html
+from src.utils import create_loader, toggle_loader, create_plot_container
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -45,13 +45,12 @@ class DataView(QWidget):
             'ridge': self.webviews[5]
         }
 
-        loader_path = os.path.join("src", "resources", "icons", "loading_spinner.gif")
-        self.scatter_loading, self.scatter_movie = self._setup_loader(loader_path)
-        self.ts_loading, self.ts_movie = self._setup_loader(loader_path)
-        self.compare_loading, self.compare_movie = self._setup_loader(loader_path)
-        self.heatmap_loading, self.heatmap_movie = self._setup_loader(loader_path)
-        self.histogram_loading, self.histogram_movie = self._setup_loader(loader_path)
-        self.ridge_loading, self.ridge_movie = self._setup_loader(loader_path)
+        self.scatter_loading, self.scatter_movie = create_loader()
+        self.ts_loading, self.ts_movie = create_loader()
+        self.compare_loading, self.compare_movie = create_loader()
+        self.heatmap_loading, self.heatmap_movie = create_loader()
+        self.histogram_loading, self.histogram_movie = create_loader()
+        self.ridge_loading, self.ridge_movie = create_loader()
 
         self.analyze_loadings = [self.scatter_loading, self.ts_loading]
         self.analyze_movies = [self.scatter_movie, self.ts_movie]
@@ -74,23 +73,6 @@ class DataView(QWidget):
         self._setup_ui()
         self._connect_signals()
 
-    def _setup_loader(self, loader_gif_path, loader_size=64):
-        """Create a loader QWidget with a centered spinner and full background."""
-        container = QWidget()
-        container.setStyleSheet("background: #fff;")  # Fill background
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addStretch()
-        label = QLabel()
-        label.setFixedSize(loader_size, loader_size)
-        label.setAlignment(Qt.AlignCenter)
-        movie = QMovie(loader_gif_path)
-        movie.setScaledSize(QSize(loader_size, loader_size))
-        label.setMovie(movie)
-        layout.addWidget(label, alignment=Qt.AlignCenter)
-        layout.addStretch()
-        return container, movie
-
     def _connect_signals(self):
         if self.controller and hasattr(self.controller.main_controller, "dataset_manager"):
             dataset_manager = self.controller.main_controller.dataset_manager
@@ -99,16 +81,6 @@ class DataView(QWidget):
 
             dataset_manager.uncertainty_plot_ready.connect(self.update_scatter_plot)
             dataset_manager.ts_plot_ready.connect(self.update_timeseries_plot)
-
-
-    def toggle_loader(self, stack: QStackedLayout, movie: QMovie, show: bool):
-        """Show or hide the loader in a stacked layout."""
-        if show:
-            movie.start()
-            stack.setCurrentIndex(1)
-        else:
-            movie.stop()
-            stack.setCurrentIndex(0)
 
     def _setup_ui(self):
         main_layout = QHBoxLayout(self)
@@ -158,13 +130,13 @@ class DataView(QWidget):
         plot_layout = QVBoxLayout(plot_box)
 
         # Scatter plot container
-        scatter_box, scatter_container, scatter_stack = self.make_plot_container(
+        scatter_box, scatter_container, scatter_stack = create_plot_container(
             self.formatted_webviews['scatter'], self.scatter_loading
         )
         plot_layout.addWidget(scatter_container)
 
         # Timeseries plot container
-        ts_box, ts_container, ts_stack = self.make_plot_container(
+        ts_box, ts_container, ts_stack = create_plot_container(
             self.formatted_webviews['ts'], self.ts_loading
         )
         plot_layout.addWidget(ts_container)
@@ -189,16 +161,16 @@ class DataView(QWidget):
         right_col = QVBoxLayout()
 
         # Create plot containers
-        vbox1, compare_container, compare_stack = self.make_plot_container(
+        vbox1, compare_container, compare_stack = create_plot_container(
             self.formatted_webviews['compare'], self.compare_loading
         )
-        vbox2, heatmap_container, heatmap_stack = self.make_plot_container(
+        vbox2, heatmap_container, heatmap_stack = create_plot_container(
             self.formatted_webviews['heatmap'], self.heatmap_loading
         )
-        vbox3, histogram_container, histogram_stack = self.make_plot_container(
+        vbox3, histogram_container, histogram_stack = create_plot_container(
             self.formatted_webviews['histogram'], self.histogram_loading
         )
-        vbox4, ridge_container, ridge_stack = self.make_plot_container(
+        vbox4, ridge_container, ridge_stack = create_plot_container(
             self.formatted_webviews['ridge'], self.ridge_loading
         )
         self.compare_plot_stacks = [compare_stack, heatmap_stack, histogram_stack, ridge_stack]
@@ -256,7 +228,7 @@ class DataView(QWidget):
             for i in range(len(self.compare_movies)):
                 i_movies = self.compare_movies[i]
                 i_stack = self.compare_plot_stacks[i]
-                self.toggle_loader(i_stack, i_movies, True)
+                toggle_loader(i_stack, i_movies, True)
 
             dataset_manager.plot_feature_data_ready.connect(self._on_compare_plot_ready)
             dataset_manager.plot_2d_histogram_ready.connect(self._on_compare_plot_ready)
@@ -297,163 +269,22 @@ class DataView(QWidget):
             "Feature", "Category", "S/N", "Min", "25th", "50th", "75th", "Max"
         ])
 
-    def show_expanded_plot(self, view):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Expanded Plot")
-        dialog.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
-        dialog.setModal(False)
-
-        # Center the dialog
-        screen = QApplication.primaryScreen().geometry()
-        width, height = 1200, 800
-        x = (screen.width() - width) // 2
-        y = (screen.height() - height) // 2
-        dialog.setGeometry(x, y, width, height)
-
-        main_layout = QVBoxLayout(dialog)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-
-        # --- Custom title bar as QWidget for full drag area ---
-        title_bar_widget = QWidget()
-        title_bar_widget.setFixedHeight(28)  # Set a fixed height for the title bar
-        title_bar_layout = QHBoxLayout(title_bar_widget)
-        title_bar_layout.setContentsMargins(0, 0, 0, 0)
-        title_label = QLabel("Expanded Plot")
-        title_label.setStyleSheet("font-weight: bold; padding-left: 8px;")
-        title_bar_layout.addWidget(title_label)
-        title_bar_layout.addStretch()
-
-        minimize_btn = QPushButton("–")
-        fullscreen_btn = QPushButton("⛶")
-        close_btn = QPushButton("✕")
-        for btn in (minimize_btn, fullscreen_btn, close_btn):
-            btn.setFixedSize(28, 28)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background: transparent;
-                    border: none;
-                    font-size: 16px;
-                }
-                QPushButton:hover {
-                    background: #eee;
-                }
-            """)
-        title_bar_layout.addWidget(minimize_btn)
-        title_bar_layout.addWidget(fullscreen_btn)
-        title_bar_layout.addWidget(close_btn)
-        main_layout.addWidget(title_bar_widget)
-
-        # --- Expanded plot view ---
-        expanded_view = QWebEngineView(dialog)
-        main_layout.addWidget(expanded_view)
-
-        # Set HTML only after the original view is loaded
-        def set_expanded_html(_ok=True):
-            view.page().toHtml(lambda html: expanded_view.setHtml(html))
-            try:
-                view.loadFinished.disconnect(set_expanded_html)
-            except Exception:
-                pass
-
-        view.loadFinished.connect(set_expanded_html)
-        set_expanded_html()
-
-        # --- Button actions ---
-        minimize_btn.clicked.connect(dialog.showMinimized)
-
-        def toggle_fullscreen():
-            if dialog.isFullScreen():
-                dialog.showNormal()
-            else:
-                dialog.showFullScreen()
-
-        fullscreen_btn.clicked.connect(toggle_fullscreen)
-        close_btn.clicked.connect(dialog.close)
-
-        # --- Drag support for title bar ---
-        drag_data = {"dragging": False, "offset": QPoint()}
-
-        def mousePressEvent(event):
-            if event.button() == Qt.LeftButton:
-                drag_data["dragging"] = True
-                drag_data["offset"] = event.globalPosition().toPoint() - dialog.frameGeometry().topLeft()
-
-        def mouseMoveEvent(event):
-            if drag_data["dragging"]:
-                dialog.move(event.globalPosition().toPoint() - drag_data["offset"])
-
-        def mouseReleaseEvent(event):
-            drag_data["dragging"] = False
-
-        title_bar_widget.mousePressEvent = mousePressEvent
-        title_bar_widget.mouseMoveEvent = mouseMoveEvent
-        title_bar_widget.mouseReleaseEvent = mouseReleaseEvent
-
-        dialog.show()
-
-    def make_plot_container(self, view, loader):
-        container = QWidget()
-        container.setStyleSheet("background: #fff;")
-        container.setMinimumSize(200, 200)
-        container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        stack = QStackedLayout()
-        stack.addWidget(view)
-        stack.addWidget(loader)
-        container.setLayout(stack)
-
-        # Expand button overlay
-        # button_layout = QHBoxLayout()
-        # button_layout.setContentsMargins(0, 0, 0, 0)
-        # button_layout.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        #
-        # expand_btn = QPushButton("⛶", container)
-        # expand_btn.setFixedSize(24, 24)
-        # expand_btn.setStyleSheet(
-        #     """
-        #     background: transparent;
-        #     color: black;
-        #     border: none;
-        #     font-size: 16px;
-        #     """
-        # )
-        # expand_btn.clicked.connect(lambda: self.show_expanded_plot(view))
-        # button_layout.addWidget(expand_btn, alignment=Qt.AlignTop | Qt.AlignLeft)
-        #
-        # overlay_layout = QVBoxLayout(container)
-        # overlay_layout.setContentsMargins(0, 0, 0, 0)
-        # overlay_layout.addLayout(button_layout)
-        # overlay_layout.addStretch()
-
-        # vbox = QVBoxLayout()
-        # vbox.setContentsMargins(0, 0, 0, 0)
-        # vbox.addWidget(container)
-        return None, container, stack
-
     def _on_compare_plot_ready(self, name, fig, html=None):
         logger.info(f"Compare plot ready: {name}")
         if html is None:
             fig.update_layout(
-                title=dict(font=dict(size=12), x=0.5, xanchor="center"),
                 font=dict(size=10),
                 xaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 yaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 legend=dict(font=dict(size=9)),
-                autosize=True,
-                width=None,
-                height=None,
-                margin=dict(l=5, r=5, t=30, b=5)
+
             )
-            plot_html = fig.to_html(
-                full_html=False,
-                include_plotlyjs='cdn',
-                config={'responsive': True, 'displayModeBar': 'hover'}
-            )
+            plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         else:
             plot_html = html
 
         def hide_spinner(_ok):
-            self.toggle_loader(self.compare_plot_stacks[0], self.compare_movie, False)
+            toggle_loader(self.compare_plot_stacks[0], self.compare_movie, False)
             self.compare_plot_stacks[0].setCurrentIndex(0)
             try:
                 self.formatted_webviews['compare'].loadFinished.disconnect(hide_spinner)
@@ -467,27 +298,19 @@ class DataView(QWidget):
         # Render the heatmap in the lower left plot box
         if html is None:
             fig.update_layout(
-                title=dict(font=dict(size=12), x=0.5, xanchor="center"),
                 font=dict(size=10),
                 xaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 yaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 legend=dict(font=dict(size=9)),
-                autosize=True,
-                width=None,
-                height=None,
-                margin=dict(l=5, r=5, t=30, b=5)
+
             )
-            plot_html = fig.to_html(
-                full_html=False,
-                include_plotlyjs='cdn',
-                config={'responsive': True, 'displayModeBar': 'hover'}
-            )
+            plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         else:
             plot_html = html
 
         # Connect the heatmap loadFinish signal to toggle the loader
         def hide_spinner(_ok):
-            self.toggle_loader(self.compare_plot_stacks[1], self.heatmap_movie, False)
+            toggle_loader(self.compare_plot_stacks[1], self.heatmap_movie, False)
             try:
                 self.formatted_webviews['heatmap'].loadFinished.disconnect(hide_spinner)
             except Exception:
@@ -500,27 +323,19 @@ class DataView(QWidget):
         # Render the histograms in the upper right plot box
         if html is None:
             fig.update_layout(
-                title=dict(font=dict(size=12), x=0.5, xanchor="center"),
                 font=dict(size=10),
                 xaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 yaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 legend=dict(font=dict(size=9)),
-                autosize=True,
-                width=None,
-                height=None,
-                margin=dict(l=5, r=5, t=30, b=5)
+
             )
-            plot_html = fig.to_html(
-                full_html=False,
-                include_plotlyjs='cdn',
-                config={'responsive': True, 'displayModeBar': 'hover'}
-            )
+            plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         else:
             plot_html = html
 
         # Connect the histogram loadFinish signal to toggle the loader
         def hide_spinner(_ok):
-            self.toggle_loader(self.compare_plot_stacks[2], self.histogram_movie, False)
+            toggle_loader(self.compare_plot_stacks[2], self.histogram_movie, False)
             try:
                 self.formatted_webviews['histogram'].loadFinished.disconnect(hide_spinner)
             except Exception:
@@ -533,27 +348,18 @@ class DataView(QWidget):
         # Render the ridgeline plot in the bottom left plot box
         if html is None:
             fig.update_layout(
-                title=dict(font=dict(size=12), x=0.5, xanchor="center"),
                 font=dict(size=10),
                 xaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 yaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 legend=dict(font=dict(size=9)),
-                autosize=True,
-                width=None,
-                height=None,
-                margin=dict(l=5, r=5, t=30, b=5)
             )
-            plot_html = fig.to_html(
-                full_html=False,
-                include_plotlyjs='cdn',
-                config={'responsive': True, 'displayModeBar': 'hover'}
-            )
+            plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         else:
             plot_html = html
 
         # Connect the ridge loadFinish signal to toggle the loader
         def hide_spinner(_ok):
-            self.toggle_loader(self.compare_plot_stacks[3], self.ridge_movie, False)
+            toggle_loader(self.compare_plot_stacks[3], self.ridge_movie, False)
             try:
                 self.formatted_webviews['ridge'].loadFinished.disconnect(hide_spinner)
             except Exception:
@@ -568,6 +374,68 @@ class DataView(QWidget):
             self.formatted_webviews[view_name].update()
             self.formatted_webviews[view_name].repaint()
             self._webview_html_cache[view_name] = html
+            self.setup_webview_downloads(view_name=view_name, webview=self.formatted_webviews[view_name])
+
+    def setup_webview_downloads(self, view_name, webview):
+        """Enable download functionality for webviews."""
+        if hasattr(webview, 'page'):
+            profile = webview.page().profile()
+            try:
+                profile.downloadRequested.disconnect()
+            except Exception:
+                pass
+            profile.downloadRequested.connect(lambda download: self.handle_download(download, view_name))
+
+    def handle_download(self, download: QWebEngineDownloadRequest, view_name):
+        """Handle download requests from webview."""
+        suggested_filename = download.suggestedFileName()
+        logger.info(f"Download requested: {suggested_filename}")
+        logger.info(f"Webview name: {view_name}")
+
+        # Generate filename based on webview name
+        dataset_name = self.dataset_selection_widget.selected_dataset
+
+        # Map webview names to plot types
+        plot_type_map = {
+            'scatter': 'data-uncertainty',
+            'ts': 'timeseries',
+            'compare': 'feature-compare',
+            'heatmap': 'correlation-heatmap',
+            'histogram': 'superimposed-histograms',
+            'ridge': 'ridgeline'
+        }
+
+        plot_type = plot_type_map.get(view_name, view_name)
+        logger.info(f"Dataset for download: {dataset_name}, plot type: {plot_type}")
+        project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
+        plot_dir = os.path.join(project_dir, "plots")
+        os.makedirs(plot_dir, exist_ok=True)
+        if view_name in ["scatter", "ts"]:
+            feature_idx = self.stats_table.currentRow() if self.stats_table.currentRow() >= 0 else 0
+            feature_name = self.stats_table.item(feature_idx, 0).text() if self.stats_table.item(feature_idx,
+                                                                                                 0) else f"feature_{feature_idx}"
+            feature_name = feature_name.replace(" ", "_").replace("/", "_")
+            suggested_filename = os.path.join(f"{plot_dir}", f"{dataset_name}-{plot_type}_{feature_name}.png")
+        elif view_name == "compare":
+            x_feature = self.compare_feature1_dropdown.currentText() or "xfeature"
+            y_feature = self.compare_feature2_dropdown.currentText() or "yfeature"
+            suggested_filename = os.path.join(f"{plot_dir}", f"{dataset_name}-{plot_type}_{x_feature}_vs_{y_feature}.png")
+        else:
+            suggested_filename = os.path.join(f"{plot_dir}", f"{dataset_name}-{plot_type}.png")
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Plot",
+            suggested_filename,
+            "PNG files (*.png);;SVG files (*.svg);;HTML files (*.html);;All files (*.*)"
+        )
+
+        if filename:
+            download.setDownloadFileName(filename)
+            download.accept()
+            logger.info(f"Plot download started: {filename}")
+        else:
+            download.cancel()
 
     def update_compare_feature_dropdowns(self):
         self.compare_feature1_dropdown.blockSignals(True)
@@ -595,7 +463,7 @@ class DataView(QWidget):
         self.compare_feature2_dropdown.blockSignals(False)
 
     def _do_update_compare_plot(self):
-        self.toggle_loader(self.compare_plot_stacks[0], self.compare_movie, True)
+        toggle_loader(self.compare_plot_stacks[0], self.compare_movie, True)
         dataset_manager = getattr(self.controller.main_controller, "dataset_manager", None)
         if not dataset_manager or not dataset_manager.loaded_datasets:
             return
@@ -746,8 +614,8 @@ class DataView(QWidget):
         dataset = dataset_manager.loaded_datasets.get(dataset_name)
         if not dataset:
             return
-        self.toggle_loader(self.analyze_plot_stacks[0], self.scatter_movie, True)
-        self.toggle_loader(self.analyze_plot_stacks[1], self.ts_movie, True)
+        toggle_loader(self.analyze_plot_stacks[0], self.scatter_movie, True)
+        toggle_loader(self.analyze_plot_stacks[1], self.ts_movie, True)
 
         # Get category color
         category = None
@@ -762,41 +630,8 @@ class DataView(QWidget):
                 category = combo.currentText()
         color = self.category_colors.get(category, "blue")
 
-        # Prepare scatter plot
-        if self.scatter_fig is not None:
-            fig = self.scatter_fig
-            new_x = dataset.input_data[feature_name].values
-            new_y = dataset.uncertainty_data[feature_name].values
-            for trace in fig.data:
-                if hasattr(trace, "marker"):
-                    trace.marker.color = color
-                    trace.marker.line.color = color
-                    trace.marker.symbol = "circle-open"
-                    trace.marker.size = 4
-                    trace.marker.line.width = 1
-            fig.data[0].x = new_x
-            fig.data[0].y = new_y
-            self.update_scatter_plot(feature_name, fig)
-        else:
-            dataset_manager.plot_data_uncertainty(dataset_name, feature_name)
-
-        # Prepare timeseries plot
-        if self.ts_fig is not None:
-            fig = self.ts_fig
-            new_y = dataset.input_data[feature_name].values
-            for trace in fig.data:
-                if hasattr(trace, "marker"):
-                    trace.marker.color = color
-                    trace.marker.line.color = color
-                    trace.marker.symbol = "circle-open"
-                    trace.marker.size = 4
-                    trace.marker.line.width = 1
-                if hasattr(trace, "line"):
-                    trace.line.color = color
-            fig.data[0].y = new_y
-            self.update_timeseries_plot(feature_name, fig)
-        else:
-            dataset_manager.plot_feature_timeseries(dataset_name, feature_name)
+        dataset_manager.plot_data_uncertainty(dataset_name, feature_name)
+        dataset_manager.plot_feature_timeseries(dataset_name, feature_name)
 
     def update_scatter_plot(self, feature_name, fig, html=None):
         logger.info(f"Updating scatter plot for feature: {feature_name}")
@@ -811,28 +646,19 @@ class DataView(QWidget):
                     trace.marker.line.color = color
             fig.update_layout(
                 title_text=f"Data/Uncertainty - {feature_name}",
-                title=dict(font=dict(size=12), x=0.5, xanchor="center"),
                 font=dict(size=10),
                 xaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 yaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 legend=dict(font=dict(size=9)),
-                autosize=True,
-                width=None,
-                height=None,
-                margin=dict(l=5, r=5, t=30, b=5)
+
             )
             fig.update_xaxes(title_text="Data")
-            plot_html = fig.to_html(
-                full_html=False,
-                include_plotlyjs='cdn',
-                config={'responsive': True, 'displayModeBar': 'hover'}
-            )
-            plot_html = f"<div style='width:100%;height:100%;padding:0;margin:0;overflow:hidden'>{plot_html}</div>"
+            plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         else:
             plot_html = html
 
         def hide_spinner(_ok):
-            self.toggle_loader(self.analyze_plot_stacks[0], self.scatter_movie, False)
+            toggle_loader(self.analyze_plot_stacks[0], self.scatter_movie, False)
             try:
                 self.formatted_webviews['scatter'].loadFinished.disconnect(hide_spinner)
             except Exception as e:
@@ -856,29 +682,19 @@ class DataView(QWidget):
                     trace.marker.color = color
                     trace.marker.line.color = color
             fig.update_layout(
-                title_text="Timeseries",
-                title=dict(font=dict(size=12), x=0.5, xanchor="center"),
+                title_text=f"Timeseries - {feature_name}",
                 font=dict(size=10),
                 xaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 yaxis=dict(title_font=dict(size=10), tickfont=dict(size=9)),
                 showlegend=False,
-                autosize=True,
-                width=None,
-                height=None,
-                margin=dict(l=5, r=5, t=30, b=5)
             )
             fig.update_yaxes(title_text="Value")
-            plot_html = fig.to_html(
-                full_html=False,
-                include_plotlyjs='cdn',
-                config={'responsive': True, 'displayModeBar': 'hover'}
-            )
-            plot_html = f"<div style='width:100%;height:100%;padding:0;margin:0;overflow:hidden'>{plot_html}</div>"
+            plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         else:
             plot_html = html
 
         def hide_spinner(_ok):
-            self.toggle_loader(self.analyze_plot_stacks[1], self.ts_movie, False)
+            toggle_loader(self.analyze_plot_stacks[1], self.ts_movie, False)
             try:
                 self.formatted_webviews['ts'].loadFinished.disconnect(hide_spinner)
             except Exception as e:

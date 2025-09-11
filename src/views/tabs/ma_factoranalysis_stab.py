@@ -1,9 +1,12 @@
+import os
 import logging
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QSizePolicy, QSplitter, QLabel,
-                               QApplication, QComboBox, QPushButton, QDialog)
+                               QApplication, QComboBox, QPushButton, QDialog, QFileDialog)
+from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 from PySide6.QtCore import Qt
 
-from src.utils import create_loader, toggle_loader, create_plot_container
+from src.utils import create_loader, toggle_loader, create_plot_container, xWebEngineView
+from src.utils.optimization import create_optimized_plotly_html
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,12 +38,12 @@ class FactorAnalysisSubTab(QWidget):
         left_group = QGroupBox("Profile\\Contribution Plots")
         left_layout = QVBoxLayout()
         _, profile_container, profile_stack = create_plot_container(self.webviews["profile_plot"],
-                                                                   self.profile_loading)
+                                                                    self.profile_loading)
         profile_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         left_layout.addWidget(profile_container, stretch=1)
 
         _, contrib_container, contrib_stack = create_plot_container(self.webviews["contrib_plot"],
-                                                                   self.contrib_loading)
+                                                                    self.contrib_loading)
         contrib_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         left_layout.addWidget(contrib_container, stretch=1)
 
@@ -64,13 +67,16 @@ class FactorAnalysisSubTab(QWidget):
         splitter.addWidget(left_group)
 
         # Right: Factor Fingerprint (top) and G Plot (bottom)
-        right_layout = QVBoxLayout()
+        right_widget = QWidget()
+        right_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
+
         # Top: Factor Fingerprint
         fingerprint_group = QGroupBox("Factor Fingerprint Plot")
         fingerprint_layout = QVBoxLayout()
         _, fingerprints_container, fingerprints_stack = create_plot_container(self.webviews["factor_fingerprints"],
-                                                                    self.fingerprints_loading)
+                                                                              self.fingerprints_loading)
         fingerprints_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         fingerprint_layout.addWidget(fingerprints_container)
         # --- Add 3D button under the fingerprint plot ---
@@ -107,15 +113,15 @@ class FactorAnalysisSubTab(QWidget):
         gplot_group.setLayout(gplot_layout)
         gplot_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         right_layout.addWidget(gplot_group, stretch=1)
-        # Wrap right_layout in a QWidget before adding to splitter
-        right_widget = QWidget()
-        right_widget.setLayout(right_layout)
+
         splitter.addWidget(right_widget)
 
         self.plot_stacks = [profile_stack, contrib_stack, fingerprints_stack, g_stack]
 
-        splitter.setStretchFactor(0, 50)
-        splitter.setStretchFactor(1, 50)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([200, 200])  # Force initial equal sizes
+
         main_layout.addWidget(splitter)
 
     def set_webview_html(self, view_name, html):
@@ -124,6 +130,53 @@ class FactorAnalysisSubTab(QWidget):
             logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
+            self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
+
+    def setup_webview_downloads(self, view_name, webview):
+        """Enable download functionality for webviews."""
+        if hasattr(webview, 'page'):
+            profile = webview.page().profile()
+            try:
+                profile.downloadRequested.disconnect()
+            except Exception:
+                pass
+            profile.downloadRequested.connect(lambda download: self.handle_download(download, view_name))
+
+    def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
+        """Handle download requests from webview."""
+        suggested_filename = download.suggestedFileName()
+        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        # Generate filename based on webview type
+        model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
+        project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
+        plot_dir = os.path.join(project_dir, "plots")
+        os.makedirs(plot_dir, exist_ok=True)
+        if webview_name in ['profile_plot', 'contrib_plot']:
+            selected_factor = f"Factor {self.factor_dropdown.currentData()}"
+            plot_type = "profile" if webview_name == 'profile_plot' else "contribution"
+            suggested_filename = os.path.join(f"{plot_dir}", f"{plot_type}_{selected_factor}_m{model_id}.png")
+        elif webview_name == 'factor_fingerprints':
+            suggested_filename = os.path.join(f"{plot_dir}", f"factor_fingerprints_m{model_id}.png")
+        elif webview_name == 'g_plot':
+            x_factor = f"Factor {self.g_x_dropdown.currentData()}"
+            y_factor = f"Factor {self.g_y_dropdown.currentData()}"
+            suggested_filename = os.path.join(f"{plot_dir}", f"g-space_{x_factor}_vs_{y_factor}_m{model_id}.png")
+        else:
+            suggested_filename = os.path.join(f"{plot_dir}", suggested_filename or f"plot_m{model_id}.png")
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Plot",
+            suggested_filename,
+            "PNG files (*.png);;SVG files (*.svg);;HTML files (*.html);;All files (*.*)"
+        )
+
+        if filename:
+            download.setDownloadFileName(filename)
+            download.accept()
+            logger.info(f"Plot download started: {filename}")
+        else:
+            download.cancel()
 
     def reattach_webviews(self):
         """
@@ -135,7 +188,7 @@ class FactorAnalysisSubTab(QWidget):
             logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
             webview.setParent(None)
-            webview.setMinimumSize(400, 400)
+            webview.setMinimumSize(0, 0)  # Remove minimum size constraints
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             QApplication.processEvents()
@@ -152,19 +205,25 @@ class FactorAnalysisSubTab(QWidget):
             stack.addWidget(loading)
             stack.setCurrentIndex(1)
 
-            # Update parent container and layout
+            # Ensure webview expands properly
+            webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            webview.setMinimumSize(0, 0)  # Remove any minimum size constraints
+
+            # Update parent containers to expand properly
             parent = stack.parentWidget()
             if parent:
-                parent.resize(400, parent.height())
-                parent.adjustSize()
+                parent.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
                 parent.updateGeometry()
-                parent.update()
                 if parent.layout():
                     parent.layout().invalidate()
-                    parent.updateGeometry()
-                    parent.update()
-            webview.adjustSize()
-            webview.updateGeometry()
+                    parent.layout().activate()
+
+            # Get the container widget that holds the stacked layout and set its size policy
+            container = stack.parentWidget()
+            if container:
+                container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+                container.updateGeometry()
+
             QApplication.processEvents()
 
             # Always clear and trigger plot update
@@ -177,6 +236,18 @@ class FactorAnalysisSubTab(QWidget):
                 self.update_fingerprints_plot(html=self._webview_html_cache.get(view_name))
             elif view_name == 'g_plot':
                 self.update_g_plot(html=self._webview_html_cache.get(view_name))
+
+        # Reset splitter to 50/50 after all webviews are reattached
+        splitter = self.findChild(QSplitter)
+        if splitter:
+            total_width = splitter.width()
+            if total_width > 0:
+                half_width = total_width // 2
+                splitter.setSizes([half_width, half_width])
+            else:
+                # Fallback if width not available yet
+                splitter.setSizes([400, 400])
+            QApplication.processEvents()
 
     def update_profile_plot(self, profile_fig=None, profile_html=None):
         logger.info("[FactorAnalysisSubTab] Creating profile plots")
@@ -192,9 +263,6 @@ class FactorAnalysisSubTab(QWidget):
 
         if profile_fig is not None:
             profile_fig.update_layout(
-                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
-                width=None, height=None,
-                autosize=True, margin=dict(l=5, r=5, t=30, b=5),
                 legend=dict(
                     x=1.06, y=1.14, xanchor='right', yanchor='top',
                     orientation='h',
@@ -204,8 +272,7 @@ class FactorAnalysisSubTab(QWidget):
                 ),
                 xaxis=dict(tickangle=45)  # Angle x tick labels to the right
             )
-            profile_html = profile_fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            profile_html = create_optimized_plotly_html(profile_fig, xanchor="center", x=0.5)
 
         def hide_profile_spinner(_ok):
             toggle_loader(self.plot_stacks[0], self.profile_movie, False)
@@ -231,13 +298,7 @@ class FactorAnalysisSubTab(QWidget):
                 contrib_html = ""
 
         if contrib_fig is not None:
-            contrib_fig.update_layout(
-                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
-                width=None, height=None,
-                autosize=True, margin=dict(l=5, r=5, t=30, b=5)
-            )
-            contrib_html = contrib_fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            contrib_html = create_optimized_plotly_html(contrib_fig, xanchor="center", x=0.5)
 
         def hide_contrib_spinner(_ok):
             toggle_loader(self.plot_stacks[1], self.contrib_movie, False)
@@ -260,13 +321,7 @@ class FactorAnalysisSubTab(QWidget):
                 html = ""
 
         if fig is not None:
-            fig.update_layout(
-                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
-                width=None, height=None,
-                autosize=True, margin=dict(l=5, r=5, t=30, b=5)
-            )
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
 
         def hide_spinner(_ok):
             toggle_loader(self.plot_stacks[2], self.fingerprints_movie, False)
@@ -294,12 +349,7 @@ class FactorAnalysisSubTab(QWidget):
                 html = ""
 
         if fig is not None:
-            fig.update_layout(
-                title=dict(font=dict(size=14), x=0.5, xanchor="center"),
-                width=None, height=None,
-                autosize=True, margin=dict(l=5, r=5, t=30, b=5))
-            html = fig.to_html(full_html=False, include_plotlyjs='cdn',
-                               config={'responsive': True, 'displayModeBar': 'hover'})
+            html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
 
         def hide_spinner(_ok):
             toggle_loader(self.plot_stacks[3], self.g_movie, False)
@@ -371,8 +421,7 @@ class FactorAnalysisSubTab(QWidget):
         dialog.resize(width, height)
         layout = QVBoxLayout(dialog)
         # Create a webview to show the plot
-        from PySide6.QtWebEngineWidgets import QWebEngineView
-        webview = QWebEngineView(dialog)
+        webview = xWebEngineView(dialog, modaled=True)
         if plot is not None:
             annotations = [
                 dict(
@@ -402,7 +451,7 @@ class FactorAnalysisSubTab(QWidget):
                 if i == 0:
                     yref = "y domain"
                 else:
-                    yref = f"y{i} domain"
+                    yref = f"y{i*2+1} domain"
                 annotations.append(dict(
                     text=f"Factor {i + 1}",
                     x=0.5,
@@ -430,6 +479,7 @@ class FactorAnalysisSubTab(QWidget):
                 ),
                 annotations=annotations
             )
+            plot.update_xaxes(tickangle=45, row=num_factors, col=1)
             if hasattr(plot, 'to_html'):
                 html = plot.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
             else:
@@ -487,16 +537,39 @@ class FactorAnalysisSubTab(QWidget):
         dialog = QDialog(self)
         dialog.setWindowTitle('3D Factor Plot')
         dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowMinMaxButtonsHint)
-        # width = 900
-        # height = QApplication.primaryScreen().availableGeometry().height()
         dialog.resize(800, 800)
         layout = QVBoxLayout(dialog)
-        from PySide6.QtWebEngineWidgets import QWebEngineView
-        webview = QWebEngineView(dialog)
+        webview = xWebEngineView(dialog, modaled=True)
         if plot is not None:
-            plot.update_layout(width=None, height=None, autosize=True,
-                               # margin=dict(l=5, r=5, t=30, b=5)
-                               )
+            y_labels = [f"Factor {i+1}" for i in range(manager.sa.factors)]
+            x_labels = manager.data_handler.input_data.columns.tolist()
+
+            for trace in plot.data:
+                if hasattr(trace, 'colorscale'):
+                    trace.colorscale = 'Jet'
+
+            plot.update_layout(
+                width=None,
+                height=None,
+                autosize=True,
+                margin=dict(l=50, r=50, t=60, b=50),
+                scene=dict(
+                    xaxis=dict(
+                       title="",
+                       tickangle=45,
+                       ticktext=x_labels,
+                       tickvals=list(range(0, len(x_labels))),
+                       tickfont=dict(size=10),
+                       ticklen=10,
+                       tickwidth=1,
+                       dtick=1
+                   ),
+                    yaxis=dict(title="", ticktext=y_labels, tickvals=list(range(0, len(y_labels)))),
+                    zaxis=dict(title="% Feature Concentration"),
+                   aspectmode='cube'  # Keep proportions consistent
+               )
+            )
+
             if hasattr(plot, 'to_html'):
                 html = plot.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
             else:

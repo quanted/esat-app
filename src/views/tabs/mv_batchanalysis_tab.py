@@ -1,7 +1,10 @@
+import os
 import logging
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QLabel, QSizePolicy, QApplication
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QLabel, QSizePolicy, QApplication, QFileDialog
+from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 
 from src.utils import create_loader, toggle_loader, create_plot_container
+from src.utils.optimization import create_optimized_plotly_html
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,8 +62,7 @@ class BatchAnalysisTab(QWidget):
             else:
                 batchanalysis_manager = batch_analysis_dict[dataset_name]
                 fig = batchanalysis_manager.loss_plot
-                fig.update_layout(title=dict(font=dict(size=14), x=0.5, xanchor="center"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
-                html = fig.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
+                html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         def hide_spinner(_ok):
             toggle_loader(self.loss_stack, self.batchloss_movie, False)
             try:
@@ -80,8 +82,7 @@ class BatchAnalysisTab(QWidget):
             else:
                 batchanalysis_manager = batch_analysis_dict[dataset_name]
                 fig = batchanalysis_manager.loss_distribution_plot
-                fig.update_layout(title=dict(font=dict(size=14), x=0.5, xanchor="center"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
-                html = fig.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
+                html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         def hide_spinner(_ok):
             toggle_loader(self.dist_stack, self.batchdist_movie, False)
             try:
@@ -105,8 +106,9 @@ class BatchAnalysisTab(QWidget):
                 batchanalysis_manager = batch_analysis_dict[dataset_name]
                 if feature_list:
                     fig = batchanalysis_manager.temporal_residual_plot
-                    fig.update_layout(title=dict(font=dict(size=14), x=0.5, xanchor="center", text=f"Model Residual - Feature {feature_list[0]}"), width=None, height=None, autosize=True, margin=dict(l=5, r=5, t=30, b=5))
-                    html = fig.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
+                    fig.update_layout(title=dict(text=f"Model Residual - Feature {feature_list[0]}"))
+                    html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
+
                     def on_feature_changed(index):
                         toggle_loader(self.residual_stack, self.batchresiduals_movie, True)
                         feature = feature_list[index] if index >= 0 else None
@@ -127,9 +129,8 @@ class BatchAnalysisTab(QWidget):
                                     trace.y = [None] * len(input_y)
                             trace.visible = True
                             trace.name = f"Model {i} - {feature}"
-                        fig.update_layout(
-                            title=dict(x=0.5, xanchor="center", text=f"Model Residual - Feature {feature}"))
-                        plot_html = fig.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
+                        fig.update_layout(title=dict(text=f"Model Residual - Feature {feature}"))
+                        plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
                         self.webviews['batchresiduals'].loadFinished.connect(hide_spinner)
                         self.webviews['batchresiduals'].setHtml(plot_html)
                     self.feature_dropdown.currentIndexChanged.connect(on_feature_changed)
@@ -153,6 +154,41 @@ class BatchAnalysisTab(QWidget):
             logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
+            self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
+
+    def setup_webview_downloads(self, view_name, webview):
+        """Enable download functionality for webviews."""
+        if hasattr(webview, 'page'):
+            profile = webview.page().profile()
+            try:
+                profile.downloadRequested.disconnect()
+            except Exception:
+                pass
+            profile.downloadRequested.connect(lambda download: self.handle_download(download, view_name))
+
+    def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
+        """Handle download requests from webview."""
+        suggested_filename = download.suggestedFileName()
+        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        # Generate filename based on webview type
+        project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
+        plot_dir = os.path.join(project_dir, "plots")
+        os.makedirs(plot_dir, exist_ok=True)
+        suggested_filename = os.path.join(f"{plot_dir}", f"{webview_name}.png")
+
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Plot",
+            suggested_filename,
+            "PNG files (*.png);;SVG files (*.svg);;HTML files (*.html);;All files (*.*)"
+        )
+
+        if filename:
+            download.setDownloadFileName(filename)
+            download.accept()
+            logger.info(f"Plot download started: {filename}")
+        else:
+            download.cancel()
 
     def reattach_webviews(self):
         """

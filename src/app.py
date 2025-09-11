@@ -1,24 +1,76 @@
+import sys
+
 from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel
 from PySide6.QtGui import QMovie
 from PySide6.QtCore import Qt, QSize, QTimer
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
+
 from src.controllers.main_controller import MainController
-import sys
+from src.utils import xWebEngineView
+
 
 def cleanup():
     # Example: terminate multiprocessing pools, threads, or other resources
     MainController.global_cleanup()
 
 def do_init(app, splash):
-    from PySide6.QtWebEngineWidgets import QWebEngineView
-
     webviews = []
-    for _ in range(12):
-        wv = QWebEngineView()
-        wv.setAttribute(Qt.WA_DontShowOnScreen, True)
-        wv.setHtml("<html></html>")
-        wv.show()
-        webviews.append(wv)
-        app.processEvents()
+
+    base_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+            <style>
+                body { margin: 0; padding: 0; font-family: Arial; }
+                .plotly-graph-div { height: 100%; width: 100%; }
+            </style>
+        </head>
+        <body>
+            <div id="plotly-div" style="height: 100%; width: 100%;"></div>
+        </body>
+        </html>
+        """
+
+    for i in range(12):
+        webview = xWebEngineView()
+
+        webview.setAttribute(Qt.WA_DontShowOnScreen, True)
+        webview.setHtml(base_html)
+
+        custom_profile = QWebEngineProfile(f"webview_{i}", webview)
+        page = QWebEnginePage(custom_profile, webview)
+
+        settings = page.settings()
+
+        # Disable unnecessary features
+        settings.setAttribute(QWebEngineSettings.PluginsEnabled, False)
+        settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)  # Keep for Plotly
+        settings.setAttribute(QWebEngineSettings.AutoLoadImages, True)
+        settings.setAttribute(QWebEngineSettings.LocalStorageEnabled, False)
+        settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, False)
+        settings.setAttribute(QWebEngineSettings.SpatialNavigationEnabled, False)
+        settings.setAttribute(QWebEngineSettings.TouchIconsEnabled, False)
+        settings.setAttribute(QWebEngineSettings.FocusOnNavigationEnabled, False)
+
+        # Optimize caching
+        custom_profile.setHttpCacheType(QWebEngineProfile.MemoryHttpCache)
+        custom_profile.setHttpCacheMaximumSize(100 * 1024 * 1024)  # 50MB cache
+
+        # Disable persistent storage
+        custom_profile.setPersistentStoragePath("")
+
+        custom_profile.setSpellCheckEnabled(False)
+
+        webview.setPage(page)
+
+        webview.show()
+        webviews.append(webview)
+
+        # Process events in batches rather than each iteration
+        if i % 4 == 0:  # Every 4 webviews
+            app.processEvents()
 
     controller = MainController(webviews=webviews)
     controller.show()

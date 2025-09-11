@@ -1,3 +1,4 @@
+import os
 import logging
 
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
@@ -5,7 +6,7 @@ from PySide6.QtCore import QThread, Signal, QTimer
 
 from src.views.main_view import MainView
 from src.controllers import ProjectController, DataController, ModelController
-from src.models import DatasetManager, BatchSAManager, BatchAnalysisManager, ModelAnalysisManager
+from src.models import DatasetManager, BatchSAManager, BatchAnalysisManager, ModelAnalysisManager, Project, Dataset
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +43,8 @@ class MainController(QMainWindow):
         self.modelanalysis_manager = {}
         self.selected_modelanalysis_manager = None
 
+        self.current_project = None
+
         self.project_controller = ProjectController(self)
         self.data_controller = DataController(self, webviews=self.webviews)
         self.model_controller = ModelController(self, webviews=self.webviews)
@@ -54,6 +57,8 @@ class MainController(QMainWindow):
     def global_cleanup():
         """Perform global cleanup tasks."""
         logger.info("Performing global cleanup tasks.")
+        # Remove project directory from environment
+        os.environ.pop('ESAT_PROJECT_DIR', None)
         # Clean up batch thread
         if hasattr(MainController, "_batch_thread"):
             thread = MainController._batch_thread
@@ -103,6 +108,17 @@ class MainController(QMainWindow):
             except Exception:
                 pass
 
+    def set_project(self, project: Project, dataset: Dataset):
+        self.current_project = project
+        self.current_project.datasets.append(dataset)
+        if project and project.output_directory:
+            os.environ['ESAT_PROJECT_DIR'] = project.output_directory
+        else:
+            os.environ.pop('ESAT_PROJECT_DIR', None)
+
+    def load_project(self, project_path: str):
+        raise NotImplementedError("Project loading not implemented yet.")
+
     def run_batch(self, dataset, factors, models, method, max_iter, seed, init_method, init_norm, converge_delta, converge_n, progress_callback):
         """Run batch analysis with the given parameters."""
         V, U = self.dataset_manager.preprocess_dataset(dataset)
@@ -145,6 +161,23 @@ class MainController(QMainWindow):
 
     def on_batchsa_finished(self):
         batchsa_manager = self._batch_manager
+        batch_directory = os.path.join(self.current_project.output_directory, batchsa_manager.dataset_name)
+        os.makedirs(batch_directory, exist_ok=True)
+        logger.info(f"Saving BatchSAManager results to {batch_directory}")
+        batchsa_manager.batch_sa.save(
+            batch_name=batchsa_manager.dataset_name,
+            output_directory=batch_directory,
+            pickle_model=False,
+            pickle_batch=False,
+            header=self.dataset_manager.loaded_datasets[batchsa_manager.dataset_name].features
+        )
+        batchsa_manager.batch_sa.save(
+            batch_name=batchsa_manager.dataset_name,
+            output_directory=batch_directory,
+            pickle_model=True,
+            pickle_batch=True,
+            header=self.dataset_manager.loaded_datasets[batchsa_manager.dataset_name].features
+        )
         self.completed_batches[batchsa_manager.dataset_name] = batchsa_manager
         logger.info(f"BatchSAManager {batchsa_manager.id} instance saved on finish. Dataset: {batchsa_manager.dataset_name}")
         self.batchsa_finished.emit(batchsa_manager.dataset_name)
