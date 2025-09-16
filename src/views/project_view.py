@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 from typing import List, Optional
+from pandas.api.types import is_numeric_dtype
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel, QPushButton,
@@ -347,27 +348,83 @@ class ProjectView(QWidget):
             row["update_index_col_options"]()
             row["update_name"]()
 
+    def excel_modal(self, sheet_names, args):
+        excel_dialog = QDialog(self)
+        excel_dialog.setWindowTitle("Select Sheet")
+        excel_dialog.setModal(True)
+        layout = QVBoxLayout(excel_dialog)
+        label = QLabel("The selected Excel file contains multiple sheets.")
+        layout.addWidget(label)
+
+        # separator
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        layout.addWidget(line)
+
+        input_label = QLabel("Input:")
+        combo_box = QComboBox()
+        combo_box.addItems(sheet_names)
+        combo_box.setCurrentIndex(0)
+        layout.addWidget(input_label)
+        layout.addWidget(combo_box)
+
+        uncertainty_label = QLabel("Uncertainty:")
+        uncertainty_combo = QComboBox()
+        uncertainty_combo.addItems(sheet_names)
+        uncertainty_combo.setCurrentIndex(1)
+        layout.addWidget(uncertainty_label)
+        layout.addWidget(uncertainty_combo)
+
+        button_layout = QHBoxLayout()
+        ok_button = QPushButton("OK")
+        cancel_button = QPushButton("Cancel")
+        button_layout.addWidget(ok_button)
+        button_layout.addWidget(cancel_button)
+        layout.addLayout(button_layout)
+
+        def on_ok():
+            input_sheet = combo_box.currentText()
+            uncertainty_sheet = uncertainty_combo.currentText()
+            print(f"Selected sheets: Input - {input_sheet}, Uncertainty - {uncertainty_sheet}")
+            if input_sheet == uncertainty_sheet:
+                QMessageBox.information(self, "Error", "Input and Uncertainty sheets must be different.")
+                return
+            excel_dialog.accept()
+            self.add_dataset(*args, sheetnames=[input_sheet, uncertainty_sheet])
+
+        def on_cancel():
+            print("Excel sheet selection cancelled.")
+            excel_dialog.reject()
+
+        ok_button.clicked.connect(on_ok)
+        cancel_button.clicked.connect(on_cancel)
+        excel_dialog.exec_()
+
+
     def add_dataset(self,
                     name: str,
                     data_file_path: str,
                     uncertainty_file_path: Optional[str],
                     index_column: str,
                     location_ids: Optional[List[str]],
-                    missing_value_label: str
+                    missing_value_label: str,
+                    sheetnames: Optional[List[str]] = None
                     ):
         """Add a new dataset to the DataManager"""
         loading_dialog = LoadingDialog("Loading dataset...", self)
         loading_dialog.show()
         QApplication.processEvents()  # Ensure dialog appears
         try:
-            self.controller.main_controller.dataset_manager.add_dataset(
-                name=name,
-                data_file_path=data_file_path,
-                uncertainty_file_path=uncertainty_file_path,
-                index_column=index_column,
-                location_ids=location_ids,
-                missing_value_label=missing_value_label
-            )
+            data_type = data_file_path.split(".")[-1].lower()
+            print(f"Data type: {data_type}")
+            if data_type in ["xls", "xlsx"] and uncertainty_file_path is None and sheetnames is None:
+                print("Excel file with multiple sheets detected, prompting for sheet selection.")
+                excel_file = pd.ExcelFile(data_file_path)
+                sheet_names = excel_file.sheet_names
+                print(f"Available sheets: {sheet_names}")
+                if len(sheet_names) > 1:
+                    self.excel_modal(sheet_names, (name, data_file_path, uncertainty_file_path, index_column, location_ids, missing_value_label))
+                    return
             dataset = Dataset(
                 name=name,
                 data_file_path=data_file_path,
@@ -376,8 +433,11 @@ class ProjectView(QWidget):
                 location_ids=location_ids,
                 missing_value_label=missing_value_label,
                 latitude=None,
-                longitude=None, location_label=None
+                longitude=None, location_label=None,
+                sheetnames=sheetnames
             )
+            self.controller.main_controller.dataset_manager.add_dataset(dataset)
+
             project = Project(name=self.project_name_edit.text(), description=None, datasets=[], output_directory=self.project_dir_edit.text())
             self.controller.main_controller.set_project(project=project, dataset=dataset)
             self.parent.statusBar().showMessage(f"Dataset '{name}' added successfully.", 3000)

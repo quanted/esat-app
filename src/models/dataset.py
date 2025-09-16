@@ -12,3 +12,4 @@ class Dataset:
     latitude: Optional[float]
     longitude: Optional[float]
     location_label: Optional[str]
+    sheetnames: Optional[List[str]]

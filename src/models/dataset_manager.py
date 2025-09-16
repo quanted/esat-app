@@ -64,39 +64,17 @@ class DatasetManager(QObject):
         self.dataset_feature_categories.clear()
         self.locations.clear()
 
-    def add_dataset(self,
-            name: str,
-            data_file_path: str,
-            uncertainty_file_path: Optional[str],
-            index_column: str,
-            location_ids: Optional[List[str]],
-            missing_value_label: str,
-            latitude: Optional[float] = None,
-            longitude: Optional[float] = None,
-            location_label: Optional[str] = None
-            ):
-        if name in self.datasets:
-            raise ValueError(f"Dataset with name {name} already exists")
+    def add_dataset(self, dataset: Dataset):
+        if dataset.name in self.datasets:
+            raise ValueError(f"Dataset with name {dataset.name} already exists")
         else:
-            self.datasets.append(
-                Dataset(
-                    name=name,
-                    data_file_path=data_file_path,
-                    uncertainty_file_path=uncertainty_file_path,
-                    index_column=index_column,
-                    location_ids=location_ids,
-                    missing_value_label=missing_value_label,
-                    latitude=latitude,
-                    longitude=longitude,
-                    location_label=location_label
-                )
-            )
+            self.datasets.append(dataset)
             if VERBOSE:
-                logger.info(f"Added new dataset: {name}, data_file_path: {data_file_path}, "
-                            f"uncertainty_file_path: {uncertainty_file_path}, index_column: {index_column}, "
-                            f"location_ids: {location_ids}, missing_value_label: {missing_value_label}, "
-                            f"latitude: {latitude}, longitude: {longitude}, location_label: {location_label}")
-            self.load(name)  # Automatically load the dataset after adding
+                logger.info(f"Added new dataset: {dataset.name}, data_file_path: {dataset.data_file_path}, "
+                            f"uncertainty_file_path: {dataset.uncertainty_file_path}, index_column: {dataset.index_column}, "
+                            f"location_ids: {dataset.location_ids}, missing_value_label: {dataset.missing_value_label}, "
+                            f"latitude: {dataset.latitude}, longitude: {dataset.longitude}, location_label: {dataset.location_label}")
+            self.load(dataset.name)  # Automatically load the dataset after adding
             self.datasets_changed.emit()
 
     def remove_dataset(self, name: str):

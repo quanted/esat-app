@@ -23,6 +23,7 @@ class DatasetLoaderWorker(QObject):
                 uncertainty_path=self.dataset.uncertainty_file_path,
                 index_col=self.dataset.index_column,
                 loc_cols=self.dataset.location_ids,
+                sheetnames=self.dataset.sheetnames,
             )
             self.finished.emit(self.dataset.name, dh)
         except Exception as e:
