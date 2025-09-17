@@ -83,7 +83,7 @@ class FactorSummarySubTab(QWidget):
 
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
-        if view_name in self.webviews.keys() and html:
+        if view_name in self.webviews.keys() and html is not None:
             logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html

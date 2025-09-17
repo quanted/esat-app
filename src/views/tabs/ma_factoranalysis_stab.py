@@ -264,7 +264,7 @@ class FactorAnalysisSubTab(QWidget):
         if profile_fig is not None:
             profile_fig.update_layout(
                 legend=dict(
-                    x=1.06, y=1.14, xanchor='right', yanchor='top',
+                    x=1.06, y=1.16, xanchor='right', yanchor='top',
                     orientation='h',
                     valign='top',
                     font=dict(size=10),

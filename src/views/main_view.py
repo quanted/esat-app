@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QMenu, QLabel, QTextBrowser
 )
-from PySide6.QtGui import QIcon, QGuiApplication
+from PySide6.QtGui import QIcon, QGuiApplication, QPixmap
 from PySide6.QtCore import Qt, QSize
 
 from src.controllers import ProjectController, DataController, ModelController
@@ -148,6 +148,15 @@ class MainView(QMainWindow):
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+        logo_label = QLabel()
+        logo_path = os.path.join(os.path.dirname(__file__), "..", "resources", "icons", "esat-logo-transparent.png")
+        if os.path.exists(logo_path):
+            pixmap = QPixmap(logo_path)
+            # Scale the logo to a reasonable size (adjust as needed)
+            scaled_pixmap = pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            logo_label.setPixmap(scaled_pixmap)
+            logo_label.setAlignment(Qt.AlignCenter)
+
         # Clear central widget layout
         layout = self.content_layout
         layout.setContentsMargins(10, 10, 10, 10)
@@ -160,8 +169,9 @@ class MainView(QMainWindow):
 
         # Title
         title_label = QLabel(f"<h2>{data.get('title', '')}</h2>")
-        layout.addWidget(title_label, alignment=Qt.AlignHCenter)
 
+        layout.addWidget(title_label, alignment=Qt.AlignHCenter)
+        layout.addWidget(logo_label)
         # Description
         desc_label = QLabel(data.get("description", ""))
         desc_label.setWordWrap(True)

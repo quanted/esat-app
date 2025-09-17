@@ -1,7 +1,8 @@
+import os
 import sys
 
 from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel
-from PySide6.QtGui import QMovie
+from PySide6.QtGui import QMovie, QIcon
 from PySide6.QtCore import Qt, QSize, QTimer
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
@@ -80,8 +81,14 @@ def main():
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(cleanup)
 
+    esat_icon = os.path.join("src","resources", "icons", "esat-logo.png")
+    esat_transparent_icon = os.path.join("src","resources", "icons", "esat-logo-transparent.png")
+    if os.path.exists(esat_transparent_icon):
+        app.setWindowIcon(QIcon(esat_transparent_icon))
+
     # Load the GIF and extract the first frame as a pixmap
-    movie = QMovie("src/resources/icons/loading_spinner.gif")
+    spinner_path = "src/resources/icons/loading_spinner.gif"
+    movie = QMovie(esat_icon)
     movie.setScaledSize(QSize(64, 64))
     movie.jumpToFrame(0)
     pixmap = movie.currentPixmap()
