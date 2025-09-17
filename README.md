@@ -1,4 +1,9 @@
+<div align="center">
+  <img src="src/resources/icons/esat-logo.png" alt="ESAT Logo" width="200">
+</div>
+
 # ESAT Application
+
 ## Overview
 The ESAT application is a python based cross-platform application that allows users to create and analyze source 
 apportionment models. The application is designed to replace the EPA's PMF5 application, fully recreating the 
