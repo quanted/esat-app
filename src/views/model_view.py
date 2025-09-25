@@ -1,22 +1,15 @@
 import logging
 
-import numpy as np
 from PySide6.QtWidgets import (QWidget, QTabWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFormLayout,
-                               QComboBox, QGroupBox, QStackedLayout, QStyledItemDelegate, QApplication)
+                               QComboBox, QGroupBox)
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QMovie, QColor, QPen
 
 from src.widgets.dataset_selection_widget import DatasetSelectionWidget
 from src.views.tabs.mv_batchrun_tab import BatchRunTab
 from src.views.tabs.mv_batchanalysis_tab import BatchAnalysisTab
 from src.views.tabs.mv_model_analysis_tab import ModelAnalysisTab
 from src.views.tabs.ma_featureanalysis_stab import FeatureAnalysisSubTab
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-)
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class ModelView(QWidget):
@@ -26,6 +19,8 @@ class ModelView(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        self.logger = get_logger()
+        
         self.webviews = webviews if webviews is not None else []
         self._webview_html_cache = {}  # Store last HTML for each webview
 
@@ -187,7 +182,7 @@ class ModelView(QWidget):
     def _refresh_base_model_table(self, dataset_name):
         # Fetch model data for the selected dataset
         if dataset_name not in self._model_table_data:
-            logger.warning(f"No model data found for dataset: {dataset_name}")
+            self.logger.warning(f"No model data found for dataset: {dataset_name}")
             # Clear the table
             self.batchrun_tab.basemodel_progress_table.setRowCount(0)
             return
@@ -239,7 +234,7 @@ class ModelView(QWidget):
         if dataset in self.controller.main_controller.modelanalysis_manager:
             self.controller.main_controller.selected_modelanalysis_manager = self.controller.main_controller.modelanalysis_manager[dataset].get(index)
 
-        logger.info(f"[ModelView] Model changed to index {index} for dataset '{dataset}'")
+        self.logger.info(f"[ModelView] Model changed to index {index} for dataset '{dataset}'")
         self.controller.main_controller.run_model_analysis(dataset_name=dataset, model_idx=index)
 
         self.modelanalysis_tab.residual_analysis_tab.plots_connected = False
@@ -326,28 +321,30 @@ class ModelView(QWidget):
 
     def _update_modelanalysis_tab(self):
         # Update the Model Analysis tab with new data
-        logger.info(f"[ModelView] Updating Model Analysis tab with new data")
+        self.logger.info(f"[ModelView] Updating Model Analysis tab with new data")
         # Trigger plot updates
         self.modelanalysis_tab.feature_analysis_tab.plots_connected = False
         self.modelanalysis_tab.feature_analysis_tab.refresh_on_activate()
 
     def _update_residualanalysis_tab(self):
-        logger.info(f"[ModelView] Updating Residual Analysis tab with new data")
+        self.logger.info(f"[ModelView] Updating Residual Analysis tab with new data")
         self.modelanalysis_tab.residual_analysis_tab.refresh_on_activate()
 
     def _update_factoranalysis_tab(self):
         # Update the Factor Analysis tab with new data
-        logger.info(f"[ModelView] Updating Factor Analysis tab with new data")
-        # Populate factor dropdown with available factors
         manager = self.controller.main_controller.selected_modelanalysis_manager
-        if manager and hasattr(manager, 'sa') and hasattr(manager.sa, 'factors'):
+        if manager is None:
+            n_factors = int(self.batchrun_tab.num_factors_edit.text())
+        else:
             n_factors = manager.sa.factors
-            self.modelanalysis_tab.factor_analysis_tab.populate_factors(list(range(1, n_factors + 1)))
+
+        self.logger.info(f"[ModelView] Populating Factor Analysis tab with {n_factors} factors")
+        self.modelanalysis_tab.factor_analysis_tab.populate_factors(list(range(1, n_factors + 1)))
 
     def _update_factorsummary_table(self):
-        logger.info(f"[ModelView] Updating Factor Summary table with new data")
+        self.logger.info(f"[ModelView] Updating Factor Summary table with new data")
         self.modelanalysis_tab.factor_summary_tab.update_table()
 
     def _update_factorsummary_plots(self):
-        logger.info(f"[ModelView] Updating Factor Summary plots with new data")
+        self.logger.info(f"[ModelView] Updating Factor Summary plots with new data")
         self.modelanalysis_tab.factor_summary_tab.update_plots()

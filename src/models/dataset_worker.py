@@ -1,8 +1,5 @@
-import logging
-
 from PySide6.QtCore import QObject, Signal, Slot, QThread
-
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class DatasetLoaderWorker(QObject):
@@ -13,10 +10,11 @@ class DatasetLoaderWorker(QObject):
         super().__init__()
         self.dataset = dataset
         self.datahandler_cls = datahandler_cls
+        self.logger = get_logger()
 
     @Slot()
     def run(self):
-        logger.info(f"Worker started for dataset {self.dataset.name} in thread {QThread.currentThread()}")
+        self.logger.info(f"Worker started for dataset {self.dataset.name} in thread {QThread.currentThread()}")
         try:
             dh = self.datahandler_cls(
                 input_path=self.dataset.data_file_path,

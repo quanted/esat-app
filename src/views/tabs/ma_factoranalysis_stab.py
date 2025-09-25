@@ -1,5 +1,4 @@
 import os
-import logging
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QSizePolicy, QSplitter, QLabel,
                                QApplication, QComboBox, QPushButton, QDialog, QFileDialog)
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
@@ -7,9 +6,7 @@ from PySide6.QtCore import Qt
 
 from src.utils import create_loader, toggle_loader, create_plot_container, xWebEngineView
 from src.utils.optimization import create_optimized_plotly_html
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class FactorAnalysisSubTab(QWidget):
@@ -17,6 +14,7 @@ class FactorAnalysisSubTab(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        self.logger = get_logger()
 
         self.webviews = webviews
         self._webview_html_cache = {}
@@ -127,7 +125,7 @@ class FactorAnalysisSubTab(QWidget):
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html:
-            logger.info(f"Setting HTML for webview: {view_name}")
+            self.logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
             self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
@@ -145,7 +143,7 @@ class FactorAnalysisSubTab(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        self.logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
         # Generate filename based on webview type
         model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
         project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
@@ -174,7 +172,7 @@ class FactorAnalysisSubTab(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -185,8 +183,9 @@ class FactorAnalysisSubTab(QWidget):
         """
         # Detach all webviews
         for view_name, webview in self.webviews.items():
-            logger.info(f"Reattaching webview: {view_name}")
+            self.logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
+            # Do NOT call setParent(None) to avoid deletion of the webview
             webview.setParent(None)
             webview.setMinimumSize(0, 0)  # Remove minimum size constraints
             webview.setMaximumSize(16777215, 16777215)
@@ -250,14 +249,14 @@ class FactorAnalysisSubTab(QWidget):
             QApplication.processEvents()
 
     def update_profile_plot(self, profile_fig=None, profile_html=None):
-        logger.info("[FactorAnalysisSubTab] Creating profile plots")
+        self.logger.info("[FactorAnalysisSubTab] Creating profile plots")
         if profile_fig is None:
             factor_idx = self.factor_dropdown.currentData()
-            logger.info(f"[FactorAnalysisSubTab] Selected factor index: {factor_idx}")
+            self.logger.info(f"[FactorAnalysisSubTab] Selected factor index: {factor_idx}")
             try:
                 profile_fig, _ = self.controller.main_controller.selected_modelanalysis_manager.plots[f"factor_profile_{factor_idx}"]
             except Exception as e:
-                logger.error(f"Error retrieving profile plots: {e}")
+                self.logger.error(f"Error retrieving profile plots: {e}")
                 profile_fig = None
                 profile_html = ""
 
@@ -285,14 +284,14 @@ class FactorAnalysisSubTab(QWidget):
         self.set_webview_html(view_name='profile_plot', html=profile_html)
 
     def update_contrib_plot(self, contrib_fig=None, contrib_html=None):
-        logger.info("[FactorAnalysisSubTab] Creating contrib plots")
+        self.logger.info("[FactorAnalysisSubTab] Creating contrib plots")
         if contrib_fig is None:
             factor_idx = self.factor_dropdown.currentData()
             try:
                 _, contrib_fig = self.controller.main_controller.selected_modelanalysis_manager.plots[
                     f"factor_profile_{factor_idx}"]
             except Exception as e:
-                logger.error(f"Error retrieving contrib plots: {e}")
+                self.logger.error(f"Error retrieving contrib plots: {e}")
 
                 contrib_fig = None
                 contrib_html = ""
@@ -311,12 +310,12 @@ class FactorAnalysisSubTab(QWidget):
         self.set_webview_html(view_name='contrib_plot', html=contrib_html)
 
     def update_fingerprints_plot(self, fig=None, html=None):
-        logger.info("[FactorAnalysisSubTab] Creating fingerprints plots")
+        self.logger.info("[FactorAnalysisSubTab] Creating fingerprints plots")
         if fig is None:
             try:
                 fig = self.controller.main_controller.selected_modelanalysis_manager.plots["factor_fingerprints"]
             except Exception as e:
-                logger.error(f"Error retrieving fingerprint plot: {e}")
+                self.logger.error(f"Error retrieving fingerprint plot: {e}")
                 fig = None
                 html = ""
 
@@ -334,17 +333,17 @@ class FactorAnalysisSubTab(QWidget):
         self.set_webview_html(view_name='factor_fingerprints', html=html)
 
     def update_g_plot(self, fig=None, html=None):
-        logger.info("[FactorAnalysisSubTab] Creating g plot")
+        self.logger.info("[FactorAnalysisSubTab] Creating g plot")
         factor_1_idx = self.g_x_dropdown.currentData()
         factor_2_idx = self.g_y_dropdown.currentData()
         factor_1_idx = 1 if factor_1_idx is None else factor_1_idx
         factor_2_idx = 2 if factor_2_idx is None else factor_2_idx
-        logger.info(f"[FactorAnalysisSubTab] G Plot factors: x={factor_1_idx}, y={factor_2_idx}")
+        self.logger.info(f"[FactorAnalysisSubTab] G Plot factors: x={factor_1_idx}, y={factor_2_idx}")
         if fig is None:
             try:
                 fig = self.controller.main_controller.selected_modelanalysis_manager.plots[f"g_space_{factor_1_idx}_{factor_2_idx}"]
             except Exception as e:
-                logger.error(f"Error retrieving fingerprint plot: {e}")
+                self.logger.error(f"Error retrieving fingerprint plot: {e}")
                 fig = None
                 html = ""
 
@@ -388,7 +387,7 @@ class FactorAnalysisSubTab(QWidget):
         """Handle factor selection change and update plots accordingly."""
         factor = self.factor_dropdown.currentData()
         factor_idx = int(factor.split("_")[-1]) if isinstance(factor, str) else factor
-        logger.info(f"[FactorAnalysisSubTab] Factor selected: {factor_idx}")
+        self.logger.info(f"[FactorAnalysisSubTab] Factor selected: {factor_idx}")
         if factor_idx is not None:
             toggle_loader(self.plot_stacks[0], self.profile_movie, True)
             toggle_loader(self.plot_stacks[1], self.contrib_movie, True)
@@ -492,9 +491,9 @@ class FactorAnalysisSubTab(QWidget):
         """
         Update the plots based on the selected feature index.
         """
-        logger.info("[FactorAnalysisSubTab] Updating plots in Factor Analysis SubTab.")
+        self.logger.info("[FactorAnalysisSubTab] Updating plots in Factor Analysis SubTab.")
         if self.controller.main_controller.selected_modelanalysis_manager is None:
-            logger.warning("No model analysis manager available.")
+            self.logger.warning("No model analysis manager available.")
             return
         self.refresh_profile_plot()
         self.refresh_fingerprints_plot()
@@ -519,7 +518,7 @@ class FactorAnalysisSubTab(QWidget):
         Call this when the subtab is activated to ensure the table and plots are updated.
         If analysis results are available, update directly. Otherwise, trigger analysis.
         """
-        logger.info("[FactorAnalysisSubTab] Refreshing Factor Analysis SubTab on activation.")
+        self.logger.info("[FactorAnalysisSubTab] Refreshing Factor Analysis SubTab on activation.")
         self.update_plots()
 
     def _on_show_3d(self):
@@ -574,9 +573,18 @@ class FactorAnalysisSubTab(QWidget):
                 html = plot.to_html(full_html=False, include_plotlyjs='cdn', config={'responsive': True, 'displayModeBar': 'hover'})
             else:
                 html = str(plot)
+            # Inject WebGL check
+            webgl_check = """
+                <script>
+                if (!window.WebGLRenderingContext || !document.createElement('canvas').getContext('webgl')) {
+                    document.body.innerHTML = "<div style='color:red;font-size:18px;padding:40px;text-align:center;'>WebGL is not supported or enabled in your browser. 3D plots cannot be displayed.</div>";
+                }
+                </script>
+                """
+            html += webgl_check
             webview.setHtml(html)
         layout.addWidget(webview)
-        dialog.show()  # Use show() instead of exec() to make the dialog non-modal/non-blocking
+        dialog.show()
 
     def _on_g_factor_changed(self):
         """
@@ -584,7 +592,7 @@ class FactorAnalysisSubTab(QWidget):
         """
         x_factor = self.g_x_dropdown.currentData()
         y_factor = self.g_y_dropdown.currentData()
-        logger.info(f"[FactorAnalysisSubTab] G Plot factors changed: x={x_factor}, y={y_factor}")
+        self.logger.info(f"[FactorAnalysisSubTab] G Plot factors changed: x={x_factor}, y={y_factor}")
         if x_factor is not None and y_factor is not None:
             toggle_loader(self.plot_stacks[3], self.g_movie, True)
             self.controller.main_controller.selected_modelanalysis_manager.run_g_space(x_factor, y_factor)

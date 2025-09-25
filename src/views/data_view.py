@@ -1,21 +1,17 @@
 import os
-import logging
 import pandas as pd
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QGroupBox, QTabWidget, QTableWidget, QVBoxLayout, QComboBox, QLabel, QSizePolicy,
-    QTableWidgetItem, QStackedLayout, QHeaderView, QAbstractItemView, QPushButton, QDialog, QApplication, QFileDialog
+    QTableWidgetItem, QHeaderView, QAbstractItemView, QApplication, QFileDialog
 )
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
-from PySide6.QtGui import QMovie
-from PySide6.QtCore import Qt, QSize, QTimer, QPoint
+from PySide6.QtCore import Qt
 
 from src.widgets.dataset_selection_widget import DatasetSelectionWidget
 from src.utils.optimization import create_optimized_plotly_html
 from src.utils import create_loader, toggle_loader, create_plot_container
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class DataView(QWidget):
@@ -23,6 +19,8 @@ class DataView(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        
+        self.logger = get_logger()
 
         # Use provided webviews from MainController
         if webviews is None or len(webviews) < 6:
@@ -270,7 +268,7 @@ class DataView(QWidget):
         ])
 
     def _on_compare_plot_ready(self, name, fig, html=None):
-        logger.info(f"Compare plot ready: {name}")
+        self.logger.info(f"Compare plot ready: {name}")
         if html is None:
             fig.update_layout(
                 font=dict(size=10),
@@ -369,6 +367,7 @@ class DataView(QWidget):
 
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview index."""
+        self.logger.info(f"Setting HTML for webview '{view_name}' (length: {len(html) if html else 0})")
         if view_name in self.formatted_webviews.keys():
             self.formatted_webviews[view_name].setHtml(html)
             self.formatted_webviews[view_name].update()
@@ -389,8 +388,8 @@ class DataView(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, view_name):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        logger.info(f"Download requested: {suggested_filename}")
-        logger.info(f"Webview name: {view_name}")
+        self.logger.info(f"Download requested: {suggested_filename}")
+        self.logger.info(f"Webview name: {view_name}")
 
         # Generate filename based on webview name
         dataset_name = self.dataset_selection_widget.selected_dataset
@@ -406,7 +405,7 @@ class DataView(QWidget):
         }
 
         plot_type = plot_type_map.get(view_name, view_name)
-        logger.info(f"Dataset for download: {dataset_name}, plot type: {plot_type}")
+        self.logger.info(f"Dataset for download: {dataset_name}, plot type: {plot_type}")
         project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
         plot_dir = os.path.join(project_dir, "plots")
         os.makedirs(plot_dir, exist_ok=True)
@@ -433,7 +432,7 @@ class DataView(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -471,7 +470,7 @@ class DataView(QWidget):
         x_feature = self.compare_feature1_dropdown.currentText()
         y_feature = self.compare_feature2_dropdown.currentText()
         view_type = self.compare_plot_toggle.currentText()
-        logger.info(f"Updating compare plot: {x_feature} vs {y_feature} ({view_type})")
+        self.logger.info(f"Updating compare plot: {x_feature} vs {y_feature} ({view_type})")
         if view_type == "Scatter":
             dataset_manager.plot_feature_data(dataset_name, x_feature, y_feature)
         else:
@@ -600,7 +599,7 @@ class DataView(QWidget):
 
     def on_stats_table_clicked(self, row, column, bypass=False):
         dataset_name = self.dataset_selection_widget.selected_dataset
-        logger.info(f"Stats table clicked at row {row}, column {column}, dataset: {dataset_name}")
+        self.logger.info(f"Stats table clicked at row {row}, column {column}, dataset: {dataset_name}")
         if row == self.plotted_row and not bypass:
             return
         self.plotted_row = row
@@ -634,7 +633,7 @@ class DataView(QWidget):
         dataset_manager.plot_feature_timeseries(dataset_name, feature_name)
 
     def update_scatter_plot(self, feature_name, fig, html=None):
-        logger.info(f"Updating scatter plot for feature: {feature_name}")
+        self.logger.info(f"update_scatter_plot called for feature: {feature_name}")
         if html is None:
             color = self.category_colors.get(self.stats_table.cellWidget(self.plotted_row, 1).currentText(), "blue")
             for trace in fig.data:
@@ -659,10 +658,11 @@ class DataView(QWidget):
 
         def hide_spinner(_ok):
             toggle_loader(self.analyze_plot_stacks[0], self.scatter_movie, False)
+            # self.analyze_plot_stacks[0].setCurrentIndex(0)
             try:
                 self.formatted_webviews['scatter'].loadFinished.disconnect(hide_spinner)
             except Exception as e:
-                logger.error(f"Error disconnecting loadFinished: {e}")
+                self.logger.error(f"Error disconnecting loadFinished: {e}")
                 pass
 
         self.formatted_webviews['scatter'].loadFinished.connect(hide_spinner)
@@ -670,8 +670,8 @@ class DataView(QWidget):
         self.scatter_fig = fig
 
     def update_timeseries_plot(self, feature_name, fig, html=None):
+        self.logger.info(f"update_timeseries_plot called for feature: {feature_name}")
         """Slot to handle the ts_plot_ready signal and update the timeseries plot."""
-        logger.info(f"Updating timeseries plot for feature: {feature_name}")
         if html is None:
             color = self.category_colors.get(self.stats_table.cellWidget(self.plotted_row, 1).currentText(), "blue")
             for trace in fig.data:
@@ -695,10 +695,12 @@ class DataView(QWidget):
 
         def hide_spinner(_ok):
             toggle_loader(self.analyze_plot_stacks[1], self.ts_movie, False)
+            # self.analyze_plot_stacks[1].setCurrentIndex(0)
+            # QApplication.processEvents()
             try:
                 self.formatted_webviews['ts'].loadFinished.disconnect(hide_spinner)
             except Exception as e:
-                logger.error(f"Error disconnecting loadFinished: {e}")
+                self.logger.error(f"Error disconnecting loadFinished: {e}")
                 pass
 
         self.formatted_webviews['ts'].loadFinished.connect(hide_spinner)
@@ -750,6 +752,7 @@ class DataView(QWidget):
             stack.addWidget(webview)
             stack.addWidget(self.compare_loadings[i])
             stack.setCurrentIndex(1)
+            # webview.show()
 
             # Resize parent and update geometry
             parent = stack.parentWidget()
@@ -796,6 +799,7 @@ class DataView(QWidget):
             stack.addWidget(webview)
             stack.addWidget(self.analyze_loadings[i])
             stack.setCurrentIndex(1)
+            # webview.show()
 
             parent = stack.parentWidget()
             if parent:

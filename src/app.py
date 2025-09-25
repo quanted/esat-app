@@ -1,14 +1,15 @@
 import os
 import sys
 
-from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel
+from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QMovie, QIcon
 from PySide6.QtCore import Qt, QSize, QTimer
-from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 
 from src.controllers.main_controller import MainController
 from src.utils import xWebEngineView
+from src.utils.loader import get_resource_path
+
 
 
 def cleanup():
@@ -81,14 +82,14 @@ def main():
     app = QApplication(sys.argv)
     app.aboutToQuit.connect(cleanup)
 
-    esat_icon = os.path.join("src","resources", "icons", "esat-logo.png")
-    esat_transparent_icon = os.path.join("src","resources", "icons", "esat-logo-transparent.png")
+    # Set application icon
+    esat_icon_path = get_resource_path(os.path.join("icons", "esat-logo.png"))
+    esat_transparent_icon = get_resource_path(os.path.join("icons", "esat-logo-transparent.png"))
     if os.path.exists(esat_transparent_icon):
         app.setWindowIcon(QIcon(esat_transparent_icon))
 
     # Load the GIF and extract the first frame as a pixmap
-    spinner_path = "src/resources/icons/loading_spinner.gif"
-    movie = QMovie(esat_icon)
+    movie = QMovie(esat_icon_path)
     movie.setScaledSize(QSize(64, 64))
     movie.jumpToFrame(0)
     pixmap = movie.currentPixmap()
@@ -98,7 +99,7 @@ def main():
     splash.show()
     app.processEvents()
 
-    QTimer.singleShot(1000, lambda: do_init(app, splash))
+    QTimer.singleShot(100, lambda: do_init(app, splash))
 
     sys.exit(app.exec())
 

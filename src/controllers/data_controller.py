@@ -6,7 +6,8 @@ from src.views.data_view import DataView
 class DataController:
     def __init__(self, main_controller, webviews=None):
         self.main_controller = main_controller  # Expected to be MainView
-        self.data_view = DataView(parent=self.main_controller.main_view, controller=self, webviews=webviews)
+        self.webviews = webviews
+        self.data_view = DataView(parent=self.main_controller.main_view, controller=self, webviews=self.webviews)
         self.data_view.setVisible(False)
         self.first_load = True
 

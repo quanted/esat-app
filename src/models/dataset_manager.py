@@ -1,5 +1,4 @@
 import uuid
-import logging
 from typing import List, Optional
 
 from PySide6.QtCore import QObject, Signal, QThread
@@ -10,13 +9,8 @@ from src.models.dataset import Dataset
 from src.models.dataset_worker import DatasetLoaderWorker, PlotDataUncertaintyWorker, PlotFeatureTSWorker, \
     PlotFeatureDataWorker, PlotFeatureCorrelationHeatmapWorker, PlotSuperimposedHistogramsWorker, Plot2DHistogramWorker, \
     PlotRidgelineWorker
+from src.utils.esat_logger import get_logger
 
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 VERBOSE = True
 
@@ -37,10 +31,12 @@ class DatasetManager(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._instance_id = uuid.uuid4()
-        if VERBOSE:
-            logger.info(f"DatasetManager instance {self._instance_id} created")
 
         self.datasets: List[Dataset] = []
+
+        self.logger = get_logger()
+        if VERBOSE:
+            self.logger.info(f"DatasetManager instance {self._instance_id} created")
 
         self.loaded_datasets = {}
         self.dataset_feature_categories = {}  # Track feature categories for each dataset
@@ -52,7 +48,7 @@ class DatasetManager(QObject):
 
     def cleanup(self):
         if VERBOSE:
-            logger.info(f"Cleaning DatasetManager instance {self._instance_id}")
+            self.logger.info(f"Cleaning DatasetManager instance {self._instance_id}")
         for thread in self.threads.values():
             thread.quit()
             thread.wait()
@@ -70,7 +66,7 @@ class DatasetManager(QObject):
         else:
             self.datasets.append(dataset)
             if VERBOSE:
-                logger.info(f"Added new dataset: {dataset.name}, data_file_path: {dataset.data_file_path}, "
+                self.logger.info(f"Added new dataset: {dataset.name}, data_file_path: {dataset.data_file_path}, "
                             f"uncertainty_file_path: {dataset.uncertainty_file_path}, index_column: {dataset.index_column}, "
                             f"location_ids: {dataset.location_ids}, missing_value_label: {dataset.missing_value_label}, "
                             f"latitude: {dataset.latitude}, longitude: {dataset.longitude}, location_label: {dataset.location_label}")
@@ -83,7 +79,7 @@ class DatasetManager(QObject):
                 self.datasets.remove(ds)
                 self.datasets_changed.emit()
                 if VERBOSE:
-                    logger.info(f"Removed dataset {name}")
+                    self.logger.info(f"Removed dataset {name}")
                 return
         raise ValueError(f"Dataset with name {name} not found")
 
@@ -116,7 +112,7 @@ class DatasetManager(QObject):
     def load(self, name: str):
         if name in self.loaded_datasets or name in self.loading_datasets:
             if VERBOSE:
-                logger.info(f"Dataset {name} is already loaded or loading")
+                self.logger.info(f"Dataset {name} is already loaded or loading")
             if name in self.loaded_datasets:
                 self.dataset_loaded.emit(name)
             return
@@ -132,21 +128,21 @@ class DatasetManager(QObject):
 
     def on_load_finished(self, name, dh):
         if VERBOSE:
-            logger.info(f"on_load_finished for {name} in instance {self._instance_id}")
+            self.logger.info(f"on_load_finished for {name} in instance {self._instance_id}")
         self.loaded_datasets[name] = dh
         self.loading_datasets.discard(name)
         if VERBOSE:
-            logger.info(f"Loaded dataset {name}")
+            self.logger.info(f"Loaded dataset {name}")
         self.dataset_loaded.emit(name)
 
     def on_load_error(self, name, error):
-        logger.error(f"on_load_error called for {name} in thread {QThread.currentThread()}: {error}")
+        self.logger.error(f"on_load_error called for {name} in thread {QThread.currentThread()}: {error}")
         self.loading_datasets.discard(name)  # Remove from loading set
 
     def plot_data_uncertainty(self, dataset_name: str, feature_name: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return
         dataset = self.loaded_datasets[dataset_name]
         self._start_worker_thread(
@@ -159,16 +155,16 @@ class DatasetManager(QObject):
 
     def on_plot_finished(self, name, fig):
         if VERBOSE:
-            logger.info(f"Scatter plot ready for {name}")
+            self.logger.info(f"Scatter plot ready for {name}")
         self.uncertainty_plot_ready.emit(name, fig)
 
     def on_plot_error(self, name, error):
-        logger.error(f"Scatter plot error for {name}: {error}")
+        self.logger.error(f"Scatter plot error for {name}: {error}")
 
     def plot_feature_timeseries(self, dataset_name: str, feature_name: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return
         dataset = self.loaded_datasets[dataset_name]
         self._start_worker_thread(
@@ -181,29 +177,29 @@ class DatasetManager(QObject):
 
     def on_ts_plot_finished(self, name, fig):
         if VERBOSE:
-            logger.info(f"Time series plot ready for {name}")
+            self.logger.info(f"Time series plot ready for {name}")
         self.ts_plot_ready.emit(name, fig)
 
     def on_ts_plot_error(self, name, error):
-        logger.error(f"Time series plot error for {name}: {error}")
+        self.logger.error(f"Time series plot error for {name}: {error}")
 
     def set_feature_category(self, dataset_name: str, feature_name :str, category: str):
         if dataset_name not in self.dataset_feature_categories:
             self.dataset_feature_categories[dataset_name] = {}
         self.dataset_feature_categories[dataset_name][feature_name] = category
         if VERBOSE:
-            logger.info(f"Set Feature: {feature_name} category to: {category} for dataset: {dataset_name}")
+            self.logger.info(f"Set Feature: {feature_name} category to: {category} for dataset: {dataset_name}")
 
     def plot_feature_data(self, dataset_name: str, x_feature: str, y_feature: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return
         if VERBOSE:
-            logger.info(f"Plotting feature data for {dataset_name} with x: {x_feature}, y: {y_feature}")
+            self.logger.info(f"Plotting feature data for {dataset_name} with x: {x_feature}, y: {y_feature}")
         dataset = self.loaded_datasets[dataset_name]
         if x_feature not in dataset.input_data.columns or y_feature not in dataset.input_data.columns:
-            logger.error(f"Features {x_feature} or {y_feature} not found in dataset {dataset_name}")
+            self.logger.error(f"Features {x_feature} or {y_feature} not found in dataset {dataset_name}")
             return
         x_idx = dataset.input_data.columns.get_loc(x_feature)
         y_idx = dataset.input_data.columns.get_loc(y_feature)
@@ -217,16 +213,16 @@ class DatasetManager(QObject):
 
     def on_feature_data_finished(self, name, fig):
         if VERBOSE:
-            logger.info(f"Feature data plot ready for {name}")
+            self.logger.info(f"Feature data plot ready for {name}")
         self.plot_feature_data_ready.emit(name, fig)
 
     def on_feature_data_error(self, name, error):
-        logger.error(f"Feature data plot error for {name}: {error}")
+        self.logger.error(f"Feature data plot error for {name}: {error}")
 
     def plot_correlation_heatmap(self, dataset_name: str, method: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return
         dataset = self.loaded_datasets[dataset_name]
         self._start_worker_thread(
@@ -239,16 +235,16 @@ class DatasetManager(QObject):
 
     def on_correlation_heatmap_finished(self, name, fig):
         if VERBOSE:
-            logger.info(f"Correlation heatmap ready for {name}")
+            self.logger.info(f"Correlation heatmap ready for {name}")
         self.plot_correlation_heatmap_ready.emit(name, fig)
 
     def on_correlation_heatmap_error(self, name, error):
-        logger.error(f"Correlation heatmap error for {name}: {error}")
+        self.logger.error(f"Correlation heatmap error for {name}: {error}")
 
     def plot_superimposed_histograms(self, dataset_name: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return
         dataset = self.loaded_datasets[dataset_name]
         self._start_worker_thread(
@@ -261,20 +257,20 @@ class DatasetManager(QObject):
 
     def on_superimposed_histograms_finished(self, name, fig):
         if VERBOSE:
-            logger.info(f"Superimposed histograms ready for {name}")
+            self.logger.info(f"Superimposed histograms ready for {name}")
         self.plot_superimposed_histograms_ready.emit(name, fig)
 
     def on_superimposed_histograms_error(self, name, error):
-        logger.error(f"Superimposed histograms error for {name}: {error}")
+        self.logger.error(f"Superimposed histograms error for {name}: {error}")
 
     def plot_2d_histogram(self, dataset_name: str, feature_x: str, feature_y: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return
         dataset = self.loaded_datasets[dataset_name]
         if VERBOSE:
-            logger.info(f"Plotting 2D histogram for {dataset_name} with x: {feature_x}, y: {feature_y}")
+            self.logger.info(f"Plotting 2D histogram for {dataset_name} with x: {feature_x}, y: {feature_y}")
         self._start_worker_thread(
             worker_cls=Plot2DHistogramWorker,
             worker_args=(dataset, feature_x, feature_y),
@@ -285,16 +281,16 @@ class DatasetManager(QObject):
 
     def on_2d_histogram_finished(self, name, fig):
         if VERBOSE:
-            logger.info(f"2D histogram ready for {name}")
+            self.logger.info(f"2D histogram ready for {name}")
         self.plot_2d_histogram_ready.emit(name, fig)
 
     def on_2d_histogram_error(self, name, error):
-        logger.error(f"2D histogram error for {name}: {error}")
+        self.logger.error(f"2D histogram error for {name}: {error}")
 
     def plot_ridgeline(self, dataset_name: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return
         dataset = self.loaded_datasets[dataset_name]
         self._start_worker_thread(
@@ -307,23 +303,23 @@ class DatasetManager(QObject):
 
     def on_ridgeline_finished(self, name, fig):
         if VERBOSE:
-            logger.info(f"Ridgeline plot ready for {name}")
+            self.logger.info(f"Ridgeline plot ready for {name}")
         self.plot_ridgeline_ready.emit(name, fig)
 
     def on_ridgeline_error(self, name, error):
-        logger.error(f"Ridgeline plot error for {name}: {error}")
+        self.logger.error(f"Ridgeline plot error for {name}: {error}")
 
     def preprocess_dataset(self, dataset_name: str):
         if dataset_name not in self.loaded_datasets:
             if VERBOSE:
-                logger.warning(f"Dataset {dataset_name} not loaded")
+                self.logger.warning(f"Dataset {dataset_name} not loaded")
             return None, None
         dataset = self.loaded_datasets[dataset_name]
         if VERBOSE:
-            logger.info(f"Preprocessing dataset {dataset_name}")
+            self.logger.info(f"Preprocessing dataset {dataset_name}")
         for feature, category in self.dataset_feature_categories.get(dataset_name, {}).items():
             dataset.set_category(feature, category)
         # Implement additional preprocessing steps here as needed
         if VERBOSE:
-            logger.info(f"Preprocessing completed for dataset {dataset_name}")
+            self.logger.info(f"Preprocessing completed for dataset {dataset_name}")
         return dataset.get_data()

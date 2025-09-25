@@ -2,14 +2,15 @@ import os
 import json
 
 from PySide6.QtWidgets import (
-    QMainWindow, QMenuBar, QToolBar, QStatusBar, QProgressBar,
+    QMainWindow, QMenuBar, QStatusBar, QProgressBar,
     QWidget, QVBoxLayout, QHBoxLayout, QListWidget, QListWidgetItem,
     QPushButton, QMenu, QLabel, QTextBrowser
 )
 from PySide6.QtGui import QIcon, QGuiApplication, QPixmap
 from PySide6.QtCore import Qt, QSize
 
-from src.controllers import ProjectController, DataController, ModelController
+from src.utils.loader import get_resource_path
+from src.utils.esat_logger import get_logger
 
 
 class CustomMenuBar(QMenuBar):
@@ -29,15 +30,27 @@ class MainView(QMainWindow):
         self.setWindowTitle("ESAT")
         self.resize(1200, 600)
 
+        self.logger = get_logger()
+
         # Set minimum size based on screen geometry
         screen_geom = QGuiApplication.primaryScreen().availableGeometry()
         min_width = min(1000, screen_geom.width())
         min_height = min(600, screen_geom.height())
         self.setMinimumSize(min_width, min_height)
 
-        with open(os.path.join("src", "resources", "styles", "main_theme.qss"), "r") as f:
-            self.setStyleSheet(f.read())
-        self.icons_path = os.path.join("src", "resources", "icons")
+        if True:  # Always use helper for resource path
+            qss_path = get_resource_path(os.path.join('styles', 'main_theme.qss'))
+        else:
+            qss_path = 'src/resources/styles/main_theme.qss'
+        try:
+            with open(qss_path, "r") as f:
+                self.setStyleSheet(f.read())
+        except PermissionError as e:
+            self.logger.warning(f"Permission error: {e}")
+        except Exception as e:
+            self.logger.warning(f"Other error: {e}")
+
+        self.icons_path = None  # Not needed anymore
         self.icon_height = 32
 
         # Menu Bar and Icon
@@ -50,7 +63,7 @@ class MainView(QMainWindow):
 
         self.menu_icon_btn = QPushButton()
         self.menu_icon_btn.setObjectName("MenuIconButton")
-        self.menu_icon_btn.setIcon(QIcon(os.path.join(self.icons_path, "menu-white.svg")))
+        self.menu_icon_btn.setIcon(QIcon(get_resource_path(os.path.join('icons', 'menu-white.svg'))))
         self.menu_icon_btn.setFixedHeight(self.icon_height)
         self.menu_icon_btn.setFlat(True)
 
@@ -93,7 +106,7 @@ class MainView(QMainWindow):
             "Home", "Project", "Data", "Models", "Workflows", "Error", "Docs", "Settings"
         ]
         for item in nav_items:
-            icon_path = os.path.join(self.icons_path, f"{item.lower()}-white.svg")
+            icon_path = get_resource_path(os.path.join('icons', f"{item.lower()}-white.svg"))
             list_icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
             list_item = QListWidgetItem(list_icon, "")
             list_item.setToolTip(item)
@@ -107,6 +120,13 @@ class MainView(QMainWindow):
         self.content_layout.setContentsMargins(10, 10, 10, 10)
         self.central_layout.addWidget(self.content_widget)
 
+        # Container for main view widget (DataView, ProjectView, etc.)
+        self.view_container = QWidget()
+        self.view_layout = QVBoxLayout(self.view_container)
+        self.view_layout.setContentsMargins(0, 0, 0, 0)
+        # self.view_layout.setAlignment(Qt.AlignCenter)
+        self.content_layout.addWidget(self.view_container)
+        # self.content_layout.setAlignment(Qt.AlignCenter)
         self.setCentralWidget(self.central_widget)
 
         # Status Bar with Progress Bar
@@ -120,7 +140,22 @@ class MainView(QMainWindow):
 
         self.sidebar_widget.itemClicked.connect(self.handle_navbar_click)
         self.sidebar_widget.setCurrentRow(0)
-        self.load_main_content()
+
+        # self._create_layout()
+        # self.load_main_content()
+        # self.view_layout.setAlignment(Qt.AlignCenter)
+
+    def _create_layout(self):
+        self.title_label = QLabel()
+        self.logo_label = QLabel()
+        self.desc_label = QLabel()
+        self.links_browser = QTextBrowser()
+        self.links_browser.setMaximumHeight(100)
+        # Align widgets in the content layout
+        self.content_layout.addWidget(self.title_label, alignment=Qt.AlignHCenter)
+        self.content_layout.addWidget(self.logo_label, alignment=Qt.AlignHCenter)
+        self.content_layout.addWidget(self.desc_label, alignment=Qt.AlignHCenter)
+        self.content_layout.addWidget(self.links_browser)
 
     def show_menu_bar(self):
         self.menu_icon_btn.setVisible(False)
@@ -134,7 +169,7 @@ class MainView(QMainWindow):
     def handle_navbar_click(self, item):
         tooltip = item.toolTip()
         if tooltip == "Home":
-            self.load_main_content()
+            self.main_controller.show_main_view()
         elif tooltip == "Project":
             self.main_controller.project_controller.show_project_view()
         elif tooltip == "Data":
@@ -143,49 +178,38 @@ class MainView(QMainWindow):
             self.main_controller.model_controller.show_data_view()
 
     def load_main_content(self):
-        content_path = os.path.join("src", "resources", "content")
-        json_path = os.path.join(content_path, "main_content.json")
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        self._create_layout()
+        json_path = get_resource_path(os.path.join('content', 'main_content.json'))
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            self.logger.warning(f"Failed to load main content JSON: {e}")
+            data = {"title": "", "description": "", "links": []}
 
-        logo_label = QLabel()
-        logo_path = os.path.join(os.path.dirname(__file__), "..", "resources", "icons", "esat-logo-transparent.png")
+        logo_path = get_resource_path(os.path.join('icons', 'esat-logo-transparent.png'))
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
-            # Scale the logo to a reasonable size (adjust as needed)
             scaled_pixmap = pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo_label.setPixmap(scaled_pixmap)
-            logo_label.setAlignment(Qt.AlignCenter)
-
-        # Clear central widget layout
-        layout = self.content_layout
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setAlignment(Qt.AlignCenter)
-        for i in reversed(range(layout.count())):
-            widget = layout.itemAt(i).widget()
-            if widget is not None:
-                layout.removeWidget(widget)
-                widget.setParent(None)
+            self.logo_label.setPixmap(scaled_pixmap)
+            self.logo_label.setAlignment(Qt.AlignCenter)
 
         # Title
-        title_label = QLabel(f"<h2>{data.get('title', '')}</h2>")
-
-        layout.addWidget(title_label, alignment=Qt.AlignHCenter)
-        layout.addWidget(logo_label)
+        self.title_label.setText(f"<h2>{data.get('title', '')}</h2>")
         # Description
-        desc_label = QLabel(data.get("description", ""))
-        desc_label.setWordWrap(True)
-        layout.addWidget(desc_label, alignment=Qt.AlignHCenter)
+        self.desc_label.setWordWrap(True)
+        self.desc_label.setText(data.get("description", ""))
 
         # Links
         links = data.get("links", [])
         if links:
-            links_browser = QTextBrowser()
             links_html = "<ul>"
             for link in links:
                 links_html += f'<li><a href="{link["url"]}">{link["text"]}</a></li>'
             links_html += "</ul>"
-            links_browser.setHtml(links_html)
-            links_browser.setOpenExternalLinks(True)
-            links_browser.setMaximumHeight(100)
-            layout.addWidget(links_browser)
+            self.links_browser.setHtml(links_html)
+            self.links_browser.setOpenExternalLinks(True)
+        else:
+            self.links_browser.clear()
+        self.content_widget.updateGeometry()
+

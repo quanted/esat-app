@@ -1,5 +1,4 @@
 import os
-import logging
 import pandas as pd
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QHBoxLayout, QTableWidget, QTableWidgetItem, QSplitter,
                                QSizePolicy, QGroupBox, QApplication, QFileDialog)
@@ -9,10 +8,7 @@ from numpy.ma.core import left_shift
 
 from src.utils import create_loader, toggle_loader, create_plot_container
 from src.utils.optimization import create_optimized_plotly_html
-
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class FactorSummarySubTab(QWidget):
@@ -20,6 +16,8 @@ class FactorSummarySubTab(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        
+        self.logger = get_logger()
 
         self.webviews = webviews
         self._webview_html_cache = {}
@@ -84,7 +82,7 @@ class FactorSummarySubTab(QWidget):
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html is not None:
-            logger.info(f"Setting HTML for webview: {view_name}")
+            self.logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
             self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
@@ -102,7 +100,7 @@ class FactorSummarySubTab(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        self.logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
         # Generate filename based on webview type
         model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
         project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
@@ -125,7 +123,7 @@ class FactorSummarySubTab(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -136,9 +134,10 @@ class FactorSummarySubTab(QWidget):
         """
         # Detach all webviews
         for view_name, webview in self.webviews.items():
-            logger.info(f"Reattaching webview: {view_name}")
+            self.logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
-            webview.setParent(None)
+            # Do NOT call setParent(None) to avoid deletion of the webview
+            # webview.setParent(None)
             webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
             webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -178,14 +177,14 @@ class FactorSummarySubTab(QWidget):
                 self.create_contribs_plot(html=self._webview_html_cache.get(view_name))
 
     def create_profiles_plot(self, fig=None, html=None):
-        logger.info(f"[FactorSummary SubTab] Creating factor profiles plot.")
+        self.logger.info(f"[FactorSummary SubTab] Creating factor profiles plot.")
         feature_idx = self.feature_table.currentRow() if self.feature_table.currentRow() >= 0 else 0
         if fig is None:
             try:
                 fig, _ = self.controller.main_controller.selected_modelanalysis_manager.plots[
                     f"factor_contributions_{feature_idx}"]
             except Exception as e:
-                logger.error(f"Error retrieving factor profiles plot: {e}")
+                self.logger.error(f"Error retrieving factor profiles plot: {e}")
                 fig = None
                 html = ""
         if fig is not None:
@@ -202,14 +201,14 @@ class FactorSummarySubTab(QWidget):
         self.set_webview_html(view_name='factor_profiles', html=html)
 
     def create_contribs_plot(self, fig=None, html=None):
-        logger.info(f"[FactorSummary SubTab] Creating factor contributions plot.")
+        self.logger.info(f"[FactorSummary SubTab] Creating factor contributions plot.")
         feature_idx = self.feature_table.currentRow() if self.feature_table.currentRow() >= 0 else 0
         if fig is None:
             try:
                 _, fig = self.controller.main_controller.selected_modelanalysis_manager.plots[
                     f"factor_contributions_{feature_idx}"]
             except Exception as e:
-                logger.error(f"Error factor contribs plot: {e}")
+                self.logger.error(f"Error factor contribs plot: {e}")
                 fig = None
                 html = ""
 
@@ -236,13 +235,13 @@ class FactorSummarySubTab(QWidget):
             self.feature_table.setColumnCount(len(columns))
             self.feature_table.setHorizontalHeaderLabels(columns)
             self.feature_table.setRowCount(0)
-            logger.error('Unable to create Feature Category table')
+            self.logger.error('Unable to create Feature Category table')
         else:
             self.feature_table.setColumnCount(len(columns))
             self.feature_table.setHorizontalHeaderLabels(columns)
             self.feature_table.setRowCount(len(data))
             data = data[columns].values.tolist() if isinstance(data, pd.DataFrame) else data
-            logger.info(f"Setting statistics table with {len(data)} rows and {len(columns)} columns.")
+            self.logger.info(f"Setting statistics table with {len(data)} rows and {len(columns)} columns.")
             for row_idx, row_data in enumerate(data):
                 for col_idx, value in enumerate(row_data):
                     # round numeric values to 3 decimal places
@@ -262,7 +261,7 @@ class FactorSummarySubTab(QWidget):
 
     def update_plots(self):
         if self.controller.main_controller.selected_modelanalysis_manager is None:
-            logger.warning("No model analysis manager available.")
+            self.logger.warning("No model analysis manager available.")
             return
 
         toggle_loader(self.plot_stacks[0], self.profile_movie, True)

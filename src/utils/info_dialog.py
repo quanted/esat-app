@@ -1,12 +1,5 @@
-import logging
 from PySide6.QtWidgets import (QVBoxLayout, QLabel, QDialog)
 from PySide6.QtCore import Qt
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-)
-logger = logging.getLogger(__name__)
 
 
 class InfoDialog(QDialog):

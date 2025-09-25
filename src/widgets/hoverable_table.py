@@ -66,7 +66,7 @@ class HoverableTableWidget(QTableWidget):
                 painter.fillRect(rect, self.selection_color)
             elif row == self._hovered_row:
                 painter.fillRect(rect, self.hover_color)
-
+        painter.end()
         super().paintEvent(event)
 
 

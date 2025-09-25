@@ -1,6 +1,3 @@
-import os
-from PySide6.QtWidgets import QWidget
-
 from src.views.project_view import ProjectView
 
 

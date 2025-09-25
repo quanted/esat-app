@@ -1,5 +1,17 @@
 /* Main Theme Stylesheet */
 
+QWidget {
+    background-color: #23272e;
+    color: white;
+}
+QMainWindow {
+    background-color: #23272e;
+}
+#HeaderBar {
+    background-color: #23272e;
+    color: white;
+}
+
 /* Sidebar Navigation Styles */
 #SidebarNav {
     background: #23272e;
@@ -44,17 +56,117 @@ QPushButton#MenuIconButton {
     padding: 5px;
     margin: 2px;
 }
-
-QPushButton#MenuIconButton:hover {
-    background: rgba(255,255,255,0.08);
+QPushButton:hover {
+    background: #3a6ea5;
+    color: white;
     border-radius: 4px;
     padding: 5px;
+}
+
+QPushButton#MenuIconButton:hover {
+    background: #27496d;
+    color: white;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+QTabBar::tab {
+    background: #23272e;
+    color: white;
+    border-left: 1px solid #2c3e5a;
+    border-right: 1px solid #2c3e5a;
+    border-bottom: 1px solid #2c3e5a;
+    border-top: none;
+    border-bottom-left-radius: 6px;
+    border-bottom-right-radius: 6px;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    padding: 5px 10px;
+    margin: 2px;
+}
+
+QTabBar::tab:hover {
+    background: #3a6ea5;
+    color: white;
+}
+
+QTabBar::tab:selected {
+    background: #27496d;
+    color: white;
+}
+
+QTabBar::tab:focus {
+    outline: none;
+    background: #3a6ea5;
 }
 
 /* Table Styles */
 QTableWidget::item:selected {
     background-color: #0078d7;  /* Windows blue */
     color: white;
+}
+
+QHeaderView::section {
+    background-color: #23272e;
+    color: white;
+    padding: 4px;
+    border: none;
+    font-weight: bold;
+}
+
+QTableWidget::verticalHeader {
+    background-color: #23272e;
+    color: whie;
+    font-weight: bold;
+}
+
+/* Modern ScrollBar Styles for Tables */
+QTableWidget QScrollBar:vertical, QTableView QScrollBar:vertical {
+    background: #23272e;
+    width: 10px;
+    margin: 0px;
+    border-radius: 5px;
+}
+QTableWidget QScrollBar::handle:vertical, QTableView QScrollBar::handle:vertical {
+    background: #3a6ea5;
+    min-height: 20px;
+    border-radius: 5px;
+}
+QTableWidget QScrollBar::handle:vertical:hover, QTableView QScrollBar::handle:vertical:hover {
+    background: #27496d;
+}
+QTableWidget QScrollBar::add-line:vertical, QTableView QScrollBar::add-line:vertical,
+QTableWidget QScrollBar::sub-line:vertical, QTableView QScrollBar::sub-line:vertical {
+    background: none;
+    height: 0px;
+}
+QTableWidget QScrollBar::add-page:vertical, QTableView QScrollBar::add-page:vertical,
+QTableWidget QScrollBar::sub-page:vertical, QTableView QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+QTableWidget QScrollBar:horizontal, QTableView QScrollBar:horizontal {
+    background: #23272e;
+    height: 10px;
+    margin: 0px;
+    border-radius: 5px;
+}
+QTableWidget QScrollBar::handle:horizontal, QTableView QScrollBar::handle:horizontal {
+    background: #3a6ea5;
+    min-width: 20px;
+    border-radius: 5px;
+}
+QTableWidget QScrollBar::handle:horizontal:hover, QTableView QScrollBar::handle:horizontal:hover {
+    background: #27496d;
+}
+QTableWidget QScrollBar::add-line:horizontal, QTableView QScrollBar::add-line:horizontal,
+QTableWidget QScrollBar::sub-line:horizontal, QTableView QScrollBar::sub-line:horizontal {
+    background: none;
+    width: 0px;
+}
+QTableWidget QScrollBar::add-page:horizontal, QTableView QScrollBar::add-page:horizontal,
+QTableWidget QScrollBar::sub-page:horizontal, QTableView QScrollBar::sub-page:horizontal {
+    background: none;
 }
 
 /* Tooltip Styles */

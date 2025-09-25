@@ -1,11 +1,8 @@
-import logging
 import traceback
 from PySide6.QtCore import QObject, Signal, Slot
 
 from esat.data.analysis import BatchAnalysis
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class BatchAnalysisManager(QObject):
@@ -14,6 +11,7 @@ class BatchAnalysisManager(QObject):
 
     def __init__(self, dataset_name, batch_sa, data_handler, parent=None):
         super().__init__(parent)
+        self.logger = get_logger()
         self.name = dataset_name
         self.batch_sa = batch_sa
         self.data_handler = data_handler
@@ -24,14 +22,14 @@ class BatchAnalysisManager(QObject):
 
     @Slot()
     def run_analysis(self):
-        logger.info(f"BatchAnalysisManager for {self.name} instance started.")
+        self.logger.info(f"BatchAnalysisManager for {self.name} instance started.")
         try:
             self.analysis = BatchAnalysis(self.batch_sa, self.data_handler)
             self.loss_plot = self.analysis.plot_loss(show=False)
             self.loss_distribution_plot = self.analysis.plot_loss_distribution(show=False)
             self.temporal_residual_plot = self.analysis.plot_temporal_residuals(feature_idx=0, show=False)
             self.finished.emit(self.analysis)
-            logger.info(f"BatchAnalysisManager for {self.name} instance finished successfully.")
+            self.logger.info(f"BatchAnalysisManager for {self.name} instance finished successfully.")
         except Exception as e:
-            logger.error(traceback.format_exc())
+            self.logger.error(traceback.format_exc())
             self.error.emit(e)

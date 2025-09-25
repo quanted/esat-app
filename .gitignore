@@ -27,3 +27,7 @@ jats/
 .pytest_cache/
 
 data/
+build/
+dist/
+main.build/
+main.dist/

@@ -1,5 +1,4 @@
 import os
-import logging
 import pandas as pd
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QGroupBox, QVBoxLayout, QLabel, QSizePolicy, QTableWidget,
                                QSplitter, QTableWidgetItem, QApplication, QLineEdit, QFileDialog)
@@ -9,9 +8,7 @@ from PySide6.QtCore import Qt, QTimer
 
 from src.utils import create_loader, toggle_loader, create_plot_container
 from src.utils.optimization import create_optimized_plotly_html
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class ResidualAnalysisSubTab(QWidget):
@@ -19,6 +16,8 @@ class ResidualAnalysisSubTab(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        
+        self.logger = get_logger()
 
         self.webviews = webviews
         self._webview_html_cache = {}
@@ -87,7 +86,7 @@ class ResidualAnalysisSubTab(QWidget):
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html:
-            logger.info(f"Setting HTML for webview: {view_name}")
+            self.logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
             self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
@@ -105,7 +104,7 @@ class ResidualAnalysisSubTab(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        self.logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
         # Generate filename based on webview type
         model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
         project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
@@ -125,7 +124,7 @@ class ResidualAnalysisSubTab(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -177,7 +176,7 @@ class ResidualAnalysisSubTab(QWidget):
             self.feature_table.setColumnCount(len(headers))
             self.feature_table.setHorizontalHeaderLabels(headers)
             self.feature_table.setRowCount(0)
-            logger.error('Unable to create Residual Feature Statistics table')
+            self.logger.error('Unable to create Residual Feature Statistics table')
         else:
             self.feature_table.setColumnCount(len(headers))
             self.feature_table.setHorizontalHeaderLabels(headers)
@@ -209,7 +208,7 @@ class ResidualAnalysisSubTab(QWidget):
             self.scaled_table.setColumnCount(3)
             self.scaled_table.setHorizontalHeaderLabels(["Date", "Feature"])
             self.scaled_table.setRowCount(0)
-            logger.error('Unable to create Scaled Residuals table')
+            self.logger.error('Unable to create Scaled Residuals table')
         else:
             if data is not None and not update:
                 self.residual_df = data
@@ -223,7 +222,7 @@ class ResidualAnalysisSubTab(QWidget):
             self.scaled_table.setHorizontalHeaderLabels(headers)
             self.scaled_table.setRowCount(len(data))
             data = data[headers].values.tolist() if isinstance(data, pd.DataFrame) else data
-            logger.info(f"Setting scaled residuals table with {len(data)} rows and {len(headers)} columns.")
+            self.logger.info(f"Setting scaled residuals table with {len(data)} rows and {len(headers)} columns.")
             for row_idx, row_data in enumerate(data):
                 for col_idx, value in enumerate(row_data):
                     # round numeric values to 3 decimal places
@@ -243,14 +242,14 @@ class ResidualAnalysisSubTab(QWidget):
             QTimer.singleShot(50, self._fit_splitter_to_content)
 
     def create_histogram_plot(self, fig=None, html=None):
-        logger.info("[ResidualAnalysisSubTab] Creating histogram plot.")
+        self.logger.info("[ResidualAnalysisSubTab] Creating histogram plot.")
         feature_idx = self.feature_table.currentRow() if self.feature_table.currentRow() >= 0 else 0
         if fig is None:
             try:
                 fig, residuals_df = self.controller.main_controller.selected_modelanalysis_manager.plots[f"residual_histogram_{feature_idx}"]
                 self.set_residuals_table(residuals_df)
             except Exception as e:
-                logger.error(f"Error retrieving residual histogram plot: {e}")
+                self.logger.error(f"Error retrieving residual histogram plot: {e}")
                 fig = None
                 html = ""
         if fig is not None:
@@ -275,8 +274,9 @@ class ResidualAnalysisSubTab(QWidget):
         """
         # Detach the webview
         webview = self.webviews['residual_histogram']
-        logger.info(f"Reattaching webview: residual_histogram")
+        self.logger.info(f"Reattaching webview: residual_histogram")
         webview.setHtml("")  # Clear content
+        # Do NOT call setParent(None) to avoid deletion of the webview
         webview.setParent(None)
         webview.setMinimumSize(0, 0)  # Remove minimum size constraints
         webview.setMaximumSize(16777215, 16777215)
@@ -318,22 +318,22 @@ class ResidualAnalysisSubTab(QWidget):
         # Example: feature_metrics should be a dict or list of dicts with headers and data
         columns = ["Feature", "Input Mean", "Input Var", "Est Mean", "Est Var", "RMSE"]
         try:
-            logger.info("[ResidualAnalysis SubTab] Residual Metrics ready, updating table.")
+            self.logger.info("[ResidualAnalysis SubTab] Residual Metrics ready, updating table.")
             model_metrics = self.controller.main_controller.selected_modelanalysis_manager.analysis.residual_metrics
             self.set_statistics_table(columns, model_metrics)
 
         except Exception as e:
-            logger.error("Residual Metrics not available in the analysis.")
-            logger.error(f"Error updating residual metrics table: {e}")
+            self.logger.error("Residual Metrics not available in the analysis.")
+            self.logger.error(f"Error updating residual metrics table: {e}")
 
     def refresh_on_activate(self):
         """
         Call this when the subtab is activated to ensure the table and plots are updated.
         If analysis results are available, update directly. Otherwise, trigger analysis.
         """
-        logger.info("Refreshing Residual Analysis SubTab on activation.")
+        self.logger.info("Refreshing Residual Analysis SubTab on activation.")
         if not self.stats_table_created:
-            logger.info("Creating statistics table for Residual Analysis SubTab.")
+            self.logger.info("Creating statistics table for Residual Analysis SubTab.")
             self.on_residual_metrics_ready()
             self.stats_table_created = True
         self.update_plots()
@@ -342,9 +342,9 @@ class ResidualAnalysisSubTab(QWidget):
         """
         Update the plots based on the selected feature index.
         """
-        logger.info("Updating plots in Residual Analysis SubTab.")
+        self.logger.info("Updating plots in Residual Analysis SubTab.")
         if self.controller.main_controller.selected_modelanalysis_manager is None:
-            logger.warning("No model analysis manager available.")
+            self.logger.warning("No model analysis manager available.")
             return
 
         toggle_loader(self.plot_stack, self.histogram_movie, True)

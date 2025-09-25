@@ -6,8 +6,6 @@ from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QApplication, QInput
                                QLineEdit, QPushButton, QHBoxLayout, QFrame, QComboBox)
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
 
 
 class xWebEngineView(QWebEngineView):
@@ -297,9 +295,8 @@ class xWebEngineView(QWebEngineView):
                                     image_data = base64.b64decode(data)
                                     with open(filename, 'wb') as f:
                                         f.write(image_data)
-                                    logger.info(f"Plot saved to: {filename}")
                                 except Exception as e:
-                                    logger.error(f"Error saving file: {e}")
+                                    logging.error(f"Error saving file: {e}")
 
                         self.page().runJavaScript(js_get_data, handle_image_data)
 

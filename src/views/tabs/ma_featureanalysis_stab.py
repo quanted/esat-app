@@ -1,5 +1,4 @@
 import os
-import logging
 import pandas as pd
 from PySide6.QtWidgets import (QWidget, QHBoxLayout,  QGroupBox, QVBoxLayout, QLabel, QSizePolicy, QApplication,
                                QTableWidget, QTableWidgetItem, QSplitter, QFileDialog)
@@ -8,9 +7,7 @@ from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 
 from src.utils import create_loader, toggle_loader, create_plot_container
 from src.utils.optimization import create_optimized_plotly_html
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class FeatureAnalysisSubTab(QWidget):
@@ -18,6 +15,8 @@ class FeatureAnalysisSubTab(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        self.logger = get_logger()
+        
         self.webviews = webviews or {}
         self._webview_html_cache = {}
 
@@ -68,7 +67,7 @@ class FeatureAnalysisSubTab(QWidget):
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html:
-            logger.info(f"Setting HTML for webview: {view_name}")
+            self.logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
             self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
@@ -86,7 +85,7 @@ class FeatureAnalysisSubTab(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        self.logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
         # Generate filename based on webview type
         feature_idx = self.table.currentRow() if self.table.currentRow() >= 0 else 0
         feature_name = self.table.item(feature_idx, 0).text() if self.table.item(feature_idx, 0) else f"feature_{feature_idx}"
@@ -108,7 +107,7 @@ class FeatureAnalysisSubTab(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -117,13 +116,13 @@ class FeatureAnalysisSubTab(QWidget):
             self.table.setColumnCount(len(headers))
             self.table.setHorizontalHeaderLabels(headers)
             self.table.setRowCount(0)
-            logger.error('Unable to create Feature Statistics table')
+            self.logger.error('Unable to create Feature Statistics table')
         else:
             self.table.setColumnCount(len(headers))
             self.table.setHorizontalHeaderLabels(headers)
             self.table.setRowCount(len(data))
             data = data[headers].values.tolist() if isinstance(data, pd.DataFrame) else data
-            logger.info(f"Setting statistics table with {len(data)} rows and {len(headers)} columns.")
+            self.logger.info(f"Setting statistics table with {len(data)} rows and {len(headers)} columns.")
             for row_idx, row_data in enumerate(data):
                 for col_idx, value in enumerate(row_data):
                     # round numeric values to 3 decimal places
@@ -141,13 +140,13 @@ class FeatureAnalysisSubTab(QWidget):
             self.table.horizontalHeader().setStretchLastSection(True)
 
     def create_scatter_plot(self, fig=None, html=None):
-        logger.info(f"[FeatureAnalysis SubTab] Creating scatter plot.")
+        self.logger.info(f"[FeatureAnalysis SubTab] Creating scatter plot.")
         feature_idx = self.table.currentRow() if self.table.currentRow() >= 0 else 0
         if fig is None:
             try:
                 fig = self.controller.main_controller.selected_modelanalysis_manager.plots[f"estimated_vs_observed_{feature_idx}"]
             except Exception as e:
-                logger.error(f"Error retrieving estimated vs observed scatter plot: {e}")
+                self.logger.error(f"Error retrieving estimated vs observed scatter plot: {e}")
                 fig = None
                 html = ""
         if fig is not None:
@@ -173,13 +172,13 @@ class FeatureAnalysisSubTab(QWidget):
         self.set_webview_html(view_name='obs_pred_scatter', html=html)
 
     def create_ts_plot(self, fig=None, html=None):
-        logger.info(f"[FeatureAnalysis SubTab] Creating time series plot.")
+        self.logger.info(f"[FeatureAnalysis SubTab] Creating time series plot.")
         feature_idx = self.table.currentRow() if self.table.currentRow() >= 0 else 0
         if fig is None:
             try:
                 fig = self.controller.main_controller.selected_modelanalysis_manager.plots[f"estimate_timeseries_{feature_idx}"]
             except Exception as e:
-                logger.error(f"Error retrieving estimated vs observed ts plot: {e}")
+                self.logger.error(f"Error retrieving estimated vs observed ts plot: {e}")
                 fig = None
                 html = ""
 
@@ -212,8 +211,9 @@ class FeatureAnalysisSubTab(QWidget):
         """
         # Detach all webviews
         for view_name, webview in self.webviews.items():
-            logger.info(f"Reattaching webview: {view_name}")
+            self.logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
+            # Do NOT call setParent(None) to avoid deletion of the webview
             webview.setParent(None)
             webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
@@ -223,7 +223,7 @@ class FeatureAnalysisSubTab(QWidget):
         for idx, view_name in enumerate(['obs_pred_scatter', 'obs_pred_ts']):
             stack = self.plot_stacks[idx]
             webview = self.webviews[view_name]
-
+            webview.setParent(None)
             # Remove all widgets from stack
             while stack.count():
                 stack.removeWidget(stack.widget(0))
@@ -262,19 +262,19 @@ class FeatureAnalysisSubTab(QWidget):
                    "SE Regression", "KS Normal Residuals", "KS PValue", "KS Statistic"]
         # extract specified columns from dataframe
         try:
-            logger.info("[FeatureAnalysis SubTab] Feature metrics ready, updating table.")
+            self.logger.info("[FeatureAnalysis SubTab] Feature metrics ready, updating table.")
             model_metrics = self.controller.main_controller.selected_modelanalysis_manager.analysis.statistics
             self.set_statistics_table(columns, model_metrics)
         except Exception as e:
-            logger.error("Statistics not available in the analysis.")
-            logger.error(f"Error updating feature metrics table: {e}")
+            self.logger.error("Statistics not available in the analysis.")
+            self.logger.error(f"Error updating feature metrics table: {e}")
 
     def update_plots(self, feature_idx: int = None):
         """
         Update the plots based on the selected feature index.
         """
         if self.controller.main_controller.selected_modelanalysis_manager is None:
-            logger.warning("No model analysis manager available.")
+            self.logger.warning("No model analysis manager available.")
             return
         feature_idx = feature_idx if feature_idx is not None else self.table.currentRow()
 
@@ -297,7 +297,7 @@ class FeatureAnalysisSubTab(QWidget):
         if row_idx < 0 or row_idx >= self.table.rowCount():
             return
         feature_idx = row_idx
-        logger.info(f"Selected feature index: {feature_idx}")
+        self.logger.info(f"Selected feature index: {feature_idx}")
         self.update_plots(feature_idx=feature_idx)
 
     def refresh_on_activate(self):
@@ -307,16 +307,16 @@ class FeatureAnalysisSubTab(QWidget):
         """
         manager = self.controller.main_controller.selected_modelanalysis_manager
         if manager is None or manager.analysis is None:
-            logger.info("No analysis available, triggering model analysis.")
+            self.logger.info("No analysis available, triggering model analysis.")
             # Attempt to trigger model analysis for the current dataset/model
             dataset_name = getattr(self.controller.main_controller, 'current_dataset', None)
             model_idx = getattr(self.controller.main_controller, 'current_model_idx', 0)
             if dataset_name is not None:
                 self.controller.main_controller.run_model_analysis(dataset_name, model_idx)
             else:
-                logger.warning("No dataset/model index available to trigger model analysis.")
+                self.logger.warning("No dataset/model index available to trigger model analysis.")
             return
-        logger.info("Analysis available, updating table and plots.")
+        self.logger.info("Analysis available, updating table and plots.")
         self.on_feature_metrics_ready()
         self.update_plots()
 

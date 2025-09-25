@@ -25,5 +25,3 @@ class ModelController:
             central_layout.addWidget(self.model_view)
 
         self.model_view.reattach_webviews()
-
-

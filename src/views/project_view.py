@@ -1,18 +1,19 @@
 import os
 import pandas as pd
 from typing import List, Optional
-from pandas.api.types import is_numeric_dtype
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel, QPushButton,
     QFileDialog, QGroupBox, QFormLayout, QScrollArea, QComboBox, QMessageBox,
-    QListWidget, QToolButton, QMenu, QSizePolicy, QFrame, QStackedWidget, QDialog,
+    QToolButton, QMenu, QSizePolicy, QFrame, QStackedWidget, QDialog,
     QApplication
 )
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtCore import Qt
 
 from src.models import Project, Dataset
+from src.utils.loader import get_resource_path
+from src.utils.esat_logger import get_logger
 
 
 class LoadingDialog(QDialog):
@@ -34,6 +35,8 @@ class ProjectView(QWidget):
         self.parent = parent
         self.controller = controller
 
+        self.logger = get_logger()
+
         self._setup_ui()
         self.setup_default_project() # For testing purposes, set default paths
 
@@ -46,7 +49,7 @@ class ProjectView(QWidget):
         setup_layout = QFormLayout()
         self.project_name_edit = QLineEdit()
         self.project_dir_edit = QLineEdit()
-        self.project_dir_edit.setReadOnly(True)
+        # self.project_dir_edit.setReadOnly(True)
         browse_btn = QPushButton("Browse")
         browse_btn.clicked.connect(self.browse_project_dir)
         dir_layout = QHBoxLayout()
@@ -80,10 +83,12 @@ class ProjectView(QWidget):
 
     def setup_default_project(self):
         # Set default paths (ensure these variables are defined in your module)
+        testing_project_name = "test_project_0"
         testing_project = os.path.join("D:\\", "git", "esat_app", "data", "test_project")
         testing_data = os.path.join("D:\\", "git", "esat_app", "data", "Dataset-BatonRouge-con.csv")
         testing_uncertainty = os.path.join("D:\\", "git", "esat_app", "data", "Dataset-BatonRouge-unc.csv")
         self.set_default_dataset_paths(testing_data, testing_uncertainty)
+        self.project_name_edit.setText(testing_project_name)
         self.project_dir_edit.setText(testing_project)
 
     def browse_project_dir(self):
@@ -231,7 +236,8 @@ class ProjectView(QWidget):
 
         # Add/remove button
         add_btn = QPushButton()
-        add_btn.setIcon(QIcon(os.path.join("src", "resources", "icons", "plus-white.svg")))
+        add_button_path = get_resource_path(os.path.join("icons", "plus-white.svg"))
+        add_btn.setIcon(QIcon(add_button_path))
         add_btn.setToolTip("Add dataset")
         add_btn.setFixedSize(32, 32)
         add_btn.setEnabled(False)  # Disabled by default
@@ -313,8 +319,8 @@ class ProjectView(QWidget):
                 location_ids=[a.text() for a in loc_id_menu.actions() if a.isChecked()],
                 missing_value_label=missing_val_edit.text().strip()
             )
-
-            add_btn.setIcon(QIcon(os.path.join("src", "resources", "icons", "minus-white.svg")))
+            minus_button_path = get_resource_path(os.path.join("icons", "minus-white.svg"))
+            add_btn.setIcon(QIcon(minus_button_path))
             add_btn.setToolTip("Remove dataset")
             add_btn.clicked.disconnect()
             add_btn.clicked.connect(remove_dataset)

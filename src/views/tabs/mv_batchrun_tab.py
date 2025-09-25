@@ -1,19 +1,16 @@
 import time
-import logging
 import numpy as np
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QGroupBox, QFormLayout, QLineEdit, QComboBox,
-                               QPushButton, QTableWidget, QProgressBar, QLabel, QSizePolicy, QHeaderView,
+                               QPushButton, QProgressBar, QSizePolicy, QHeaderView,
                                QTableWidgetItem, QMessageBox, QApplication)
 from PySide6.QtGui import QIntValidator, QDoubleValidator
 
 from src.widgets.dataset_selection_widget import DatasetSelectionWidget
 from src.widgets.hoverable_table import HoverableTableWidget, BestRowDelegate
 from src.utils import InfoDialog
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class BatchRunTab(QWidget):
@@ -23,6 +20,8 @@ class BatchRunTab(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        self.logger = get_logger()
+        
         self._active_row_animations = []
         self.model_progress_widgets = {}
         self._progress_update_counter = {}
@@ -95,7 +94,6 @@ class BatchRunTab(QWidget):
             }
             QPushButton:hover {
                 background-color: #388E3C;
-                box-shadow: 0 0 6px #A5D6A7;
             }
         """)
         left_layout.addWidget(self.run_button)
@@ -141,7 +139,7 @@ class BatchRunTab(QWidget):
         QApplication.processEvents()
         self._set_cancel_button()
 
-        logger.info("Starting batch model run")
+        self.logger.info("Starting batch model run")
         self.basemodel_progress_table.setUpdatesEnabled(False)
         self._batch_completed = False
 
@@ -266,11 +264,11 @@ class BatchRunTab(QWidget):
 
         # Call run_batch on the controller
         batchsa_manager = self.controller.main_controller.run_batch(dataset, **params)
-        logger.info(f"BatchSAManager: {batchsa_manager}")
+        self.logger.info(f"BatchSAManager: {batchsa_manager}")
         if batchsa_manager:
             batchsa_manager.progress.connect(self.progress_callback)
         else:
-            logger.error("BatchSAManager is None!")
+            self.logger.error("BatchSAManager is None!")
 
         # Connect the progress signal to the callback
         batchsa_manager.progress.connect(self.progress_callback)
@@ -357,7 +355,7 @@ class BatchRunTab(QWidget):
             self.all_models_completed.emit()
 
     def batch_model_finish(self):
-        logger.info("Batch model run completed, processing results...")
+        self.logger.info("Batch model run completed, processing results...")
         QApplication.processEvents()  # Flush event queue
         # 1. Extract all data as text, converting Progress to "iterations/max_iterations"
         min_qtrue = float('inf')
@@ -404,8 +402,8 @@ class BatchRunTab(QWidget):
         self._restore_run_button()
 
     def completed_batch_table(self, table_data, best_row=-1):
-        logger.info("Updating completed batch table with results...")
-        logger.info(f"Best model: {best_row+1} with Q(True) value: {table_data[best_row][2] if best_row >= 0 else 'N/A'}")
+        self.logger.info("Updating completed batch table with results...")
+        self.logger.info(f"Best model: {best_row+1} with Q(True) value: {table_data[best_row][2] if best_row >= 0 else 'N/A'}")
 
         self.overall_progress_bar.setVisible(False)
         # 2. Clear and repopulate table with QTableWidgetItems only
@@ -466,7 +464,6 @@ class BatchRunTab(QWidget):
             }
             QPushButton:hover {
                 background-color: #B71C1C;
-                box-shadow: 0 0 6px #FFCDD2;
             }
         """)
         self.run_button.clicked.disconnect()
@@ -476,6 +473,7 @@ class BatchRunTab(QWidget):
         self.run_button.setText("Run")
         self.run_button.setStyleSheet("""
             QPushButton {
+            
                 background-color: #4CAF50;
                 color: white;
                 font-size: 13px;
@@ -486,7 +484,6 @@ class BatchRunTab(QWidget):
             }
             QPushButton:hover {
                 background-color: #388E3C;
-                box-shadow: 0 0 6px #A5D6A7;
             }
         """)
         self.run_button.clicked.disconnect()

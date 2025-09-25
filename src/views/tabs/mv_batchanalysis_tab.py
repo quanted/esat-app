@@ -1,13 +1,10 @@
 import os
-import logging
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QLabel, QSizePolicy, QApplication, QFileDialog
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 
 from src.utils import create_loader, toggle_loader, create_plot_container
 from src.utils.optimization import create_optimized_plotly_html
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
+from src.utils.esat_logger import get_logger
 
 
 class BatchAnalysisTab(QWidget):
@@ -15,6 +12,9 @@ class BatchAnalysisTab(QWidget):
         super().__init__(parent)
         self.parent = parent
         self.controller = controller
+        
+        self.logger = get_logger()
+        
         self.webviews = webviews or {}
         self._webview_html_cache = {}
 
@@ -151,7 +151,7 @@ class BatchAnalysisTab(QWidget):
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html:
-            logger.info(f"Setting HTML for webview: {view_name}")
+            self.logger.info(f"Setting HTML for webview: {view_name}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
             self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
@@ -169,7 +169,7 @@ class BatchAnalysisTab(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        self.logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
         # Generate filename based on webview type
         project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
         plot_dir = os.path.join(project_dir, "plots")
@@ -186,7 +186,7 @@ class BatchAnalysisTab(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -194,9 +194,15 @@ class BatchAnalysisTab(QWidget):
         """
         Reattach shared webviews with cached HTML, ensuring correct layout and sizing.
         """
-        # Detach all webviews
+        # Detach all webviews (without deleting them)
         for view_name, webview in self.webviews.items():
-            webview.setHtml("")  # Clear content
+            # Only clear content if widget is still valid
+            try:
+                webview.setHtml("")  # Clear content
+            except RuntimeError:
+                self.logger.warning(f"Webview {view_name} already deleted, skipping setHtml.")
+                continue
+            # Do NOT call setParent(None) to avoid deletion
             webview.setParent(None)
             webview.setMinimumSize(400, 400)
             webview.setMaximumSize(16777215, 16777215)
@@ -206,7 +212,7 @@ class BatchAnalysisTab(QWidget):
         for idx, view_name in enumerate(['batchloss', 'batchdist', 'batchresiduals']):
             stack = self.plot_stacks[idx]
             webview = self.webviews[view_name]
-
+            webview.setParent(None)
             # Remove all widgets from stack
             while stack.count():
                 stack.removeWidget(stack.widget(0))

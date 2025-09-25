@@ -1,4 +1,5 @@
 import warnings
+import multiprocessing
 from src.app import main
 
 
@@ -10,4 +11,5 @@ warnings.filterwarnings(
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     main()
