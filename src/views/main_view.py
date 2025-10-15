@@ -1,5 +1,5 @@
-import os
-import json
+from os import path
+from json import load
 
 from PySide6.QtWidgets import (
     QMainWindow, QMenuBar, QStatusBar, QProgressBar,
@@ -39,16 +39,16 @@ class MainView(QMainWindow):
         self.setMinimumSize(min_width, min_height)
 
         if True:  # Always use helper for resource path
-            qss_path = get_resource_path(os.path.join('styles', 'main_theme.qss'))
+            qss_path = get_resource_path(path.join('styles', 'main_theme.qss'))
         else:
             qss_path = 'src/resources/styles/main_theme.qss'
         try:
             with open(qss_path, "r") as f:
                 self.setStyleSheet(f.read())
         except PermissionError as e:
-            self.logger.warning(f"Permission error: {e}")
+            self.logger.warning(f"[MainView]: Permission error: {e}")
         except Exception as e:
-            self.logger.warning(f"Other error: {e}")
+            self.logger.warning(f"[MainView]: Other error: {e}")
 
         self.icons_path = None  # Not needed anymore
         self.icon_height = 32
@@ -63,7 +63,7 @@ class MainView(QMainWindow):
 
         self.menu_icon_btn = QPushButton()
         self.menu_icon_btn.setObjectName("MenuIconButton")
-        self.menu_icon_btn.setIcon(QIcon(get_resource_path(os.path.join('icons', 'menu-white.svg'))))
+        self.menu_icon_btn.setIcon(QIcon(get_resource_path(path.join('icons', 'menu-white.svg'))))
         self.menu_icon_btn.setFixedHeight(self.icon_height)
         self.menu_icon_btn.setFlat(True)
 
@@ -106,8 +106,8 @@ class MainView(QMainWindow):
             "Home", "Project", "Data", "Models", "Workflows", "Error", "Docs", "Settings"
         ]
         for item in nav_items:
-            icon_path = get_resource_path(os.path.join('icons', f"{item.lower()}-white.svg"))
-            list_icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
+            icon_path = get_resource_path(path.join('icons', f"{item.lower()}-white.svg"))
+            list_icon = QIcon(icon_path) if path.exists(icon_path) else QIcon()
             list_item = QListWidgetItem(list_icon, "")
             list_item.setToolTip(item)
             self.sidebar_widget.addItem(list_item)
@@ -141,10 +141,6 @@ class MainView(QMainWindow):
         self.sidebar_widget.itemClicked.connect(self.handle_navbar_click)
         self.sidebar_widget.setCurrentRow(0)
 
-        # self._create_layout()
-        # self.load_main_content()
-        # self.view_layout.setAlignment(Qt.AlignCenter)
-
     def _create_layout(self):
         self.title_label = QLabel()
         self.logo_label = QLabel()
@@ -171,24 +167,24 @@ class MainView(QMainWindow):
         if tooltip == "Home":
             self.main_controller.show_main_view()
         elif tooltip == "Project":
-            self.main_controller.project_controller.show_project_view()
+            self.main_controller.project_controller.show_view()
         elif tooltip == "Data":
-            self.main_controller.data_controller.show_data_view()
+            self.main_controller.data_controller.show_view()
         elif tooltip == "Models":
-            self.main_controller.model_controller.show_data_view()
+            self.main_controller.model_controller.show_view()
 
     def load_main_content(self):
         self._create_layout()
-        json_path = get_resource_path(os.path.join('content', 'main_content.json'))
+        json_path = get_resource_path(path.join('content', 'main_content.json'))
         try:
             with open(json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                data = load(f)
         except Exception as e:
-            self.logger.warning(f"Failed to load main content JSON: {e}")
+            self.logger.warning(f"[MainView]: Failed to load main content JSON: {e}")
             data = {"title": "", "description": "", "links": []}
 
-        logo_path = get_resource_path(os.path.join('icons', 'esat-logo-transparent.png'))
-        if os.path.exists(logo_path):
+        logo_path = get_resource_path(path.join('icons', 'esat-logo-transparent.png'))
+        if path.exists(logo_path):
             pixmap = QPixmap(logo_path)
             scaled_pixmap = pixmap.scaled(300, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.logo_label.setPixmap(scaled_pixmap)

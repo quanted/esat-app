@@ -14,7 +14,7 @@ class DatasetLoaderWorker(QObject):
 
     @Slot()
     def run(self):
-        self.logger.info(f"Worker started for dataset {self.dataset.name} in thread {QThread.currentThread()}")
+        self.logger.info(f"[DatasetLoaderWorker]: Worker started for dataset {self.dataset.name} in thread {QThread.currentThread()}")
         try:
             dh = self.datahandler_cls(
                 input_path=self.dataset.data_file_path,

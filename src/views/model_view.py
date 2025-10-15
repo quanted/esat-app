@@ -1,9 +1,6 @@
-import logging
-
 from PySide6.QtWidgets import (QWidget, QTabWidget, QVBoxLayout, QLabel, QHBoxLayout, QSizePolicy, QFormLayout,
                                QComboBox, QGroupBox)
 from PySide6.QtCore import Qt, Signal
-
 from src.widgets.dataset_selection_widget import DatasetSelectionWidget
 from src.views.tabs.mv_batchrun_tab import BatchRunTab
 from src.views.tabs.mv_batchanalysis_tab import BatchAnalysisTab
@@ -29,6 +26,7 @@ class ModelView(QWidget):
         self._progress_update_counter = {}
         self._last_update_time = {}
         self._batch_completed = False
+        self._initial_load = True
 
         self._model_table_data = {}
 
@@ -67,26 +65,25 @@ class ModelView(QWidget):
                 color: black;
             }
         ''')
-        self.tabs.setTabPosition(QTabWidget.South)  # Tabs at the bottom
+        self.tabs.setTabPosition(QTabWidget.TabPosition.South)  # Tabs at the bottom
         self._setup_tabs()
         main_layout.addWidget(self.tabs, stretch=3)
 
         # --- Right: Controls section ---
         right_panel = QWidget()
-        right_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        right_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         right_panel.setFixedWidth(220)
         right_layout = QVBoxLayout(right_panel)
-        right_layout.setAlignment(Qt.AlignTop)
+        right_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Add DatasetSelectionWidget
-        self.dataset_selection_widget = DatasetSelectionWidget(controller=self.controller)
+        self.dataset_selection_widget = DatasetSelectionWidget(dataset_manager=self.controller.main_controller.dataset_manager, controller=self.controller, parent=self)
         right_layout.addWidget(self.dataset_selection_widget)
 
         model_selected_widget = self._create_model_selected_widget()
         right_layout.addWidget(model_selected_widget)
         self.model_dropdown.currentIndexChanged.connect(self.on_model_changed)
-
-        main_layout.addWidget(right_panel, stretch=0, alignment=Qt.AlignTop)
+        main_layout.addWidget(right_panel, stretch=0, alignment=Qt.AlignmentFlag.AlignTop)
 
     def _setup_signals(self):
         # Connect to DataManager's data_loaded signal if available
@@ -146,6 +143,7 @@ class ModelView(QWidget):
         return group_box
 
     def _on_dataset_changed(self, dataset_name):
+        self.logger.info(f"[ModelView] Dataset changed to: {dataset_name}")
         # Update base model table for the new dataset
         self._refresh_base_model_table(dataset_name)
         # Update batch analysis plots
@@ -182,7 +180,7 @@ class ModelView(QWidget):
     def _refresh_base_model_table(self, dataset_name):
         # Fetch model data for the selected dataset
         if dataset_name not in self._model_table_data:
-            self.logger.warning(f"No model data found for dataset: {dataset_name}")
+            self.logger.warning(f"[ModelView]: No model data found for dataset: {dataset_name}")
             # Clear the table
             self.batchrun_tab.basemodel_progress_table.setRowCount(0)
             return
@@ -198,6 +196,9 @@ class ModelView(QWidget):
             self.model_dropdown.setEnabled(False)
 
     def on_model_changed(self, index):
+        if self._initial_load:
+            self._initial_load = False
+            return
         dataset = self.dataset_selection_widget.selected_dataset
         model_table_data = self._model_table_data.get(dataset, [])
         if index >= 0 and index < len(model_table_data):

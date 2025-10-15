@@ -1,9 +1,9 @@
-import warnings
-import multiprocessing
+from warnings import filterwarnings
+from multiprocessing import freeze_support
 from src.app import main
 
 
-warnings.filterwarnings(
+filterwarnings(
     "ignore",
     category=RuntimeWarning,
     message=r".*Failed to disconnect.*loadFinished\(bool\).*"
@@ -11,5 +11,5 @@ warnings.filterwarnings(
 
 
 if __name__ == "__main__":
-    multiprocessing.freeze_support()
+    freeze_support()
     main()

@@ -1,5 +1,5 @@
-import os
 import sys
+from os import path
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QApplication)
 from PySide6.QtCore import Qt, QSize
@@ -8,14 +8,14 @@ from PySide6.QtGui import QMovie
 
 def get_resource_path(rel_path):
     if hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, 'resources', rel_path)
+        return path.join(sys._MEIPASS, 'resources', rel_path)
     else:
-        return os.path.join('src', 'resources', rel_path)
+        return path.join('src', 'resources', rel_path)
 
 
 def create_loader(loader_size=64):
     """Create a loader QWidget with a centered spinner and full background."""
-    loader_path = get_resource_path(os.path.join('icons', 'loading_spinner.gif'))
+    loader_path = get_resource_path(path.join('icons', 'loading_spinner.gif'))
 
     container = QWidget()
     container.setStyleSheet("background: #fff;")  # Fill background

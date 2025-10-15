@@ -1,6 +1,6 @@
 
 
-def create_optimized_plotly_html(fig, xanchor='center', x: float = None):
+def create_optimized_plotly_html(fig, xanchor='center', x: float = None, static_plot: bool = False) -> str:
     """Create optimized HTML for faster rendering."""
     # Optimize figure for performance
     fig.update_layout(
@@ -12,11 +12,7 @@ def create_optimized_plotly_html(fig, xanchor='center', x: float = None):
         transition_duration=0,
         # Optimize rendering
         uirevision=True,  # Prevents unnecessary re-rendering
-        # Reduce margins for faster layout
         margin=dict(l=20, r=20, t=80, b=20),
-        # Use webgl for better performance with large datasets
-        # (if your data supports it)
-        # hovermode='closest',
         scene=dict(
             camera=dict(projection=dict(type="orthographic"))
         )
@@ -30,7 +26,7 @@ def create_optimized_plotly_html(fig, xanchor='center', x: float = None):
             'responsive': True,
             'displayModeBar': True,
             # Performance optimizations
-            'staticPlot': False,  # Set to True if no interactivity needed
+            'staticPlot': static_plot,  # Set to True if no interactivity needed
             'displaylogo': False,
             'modeBarButtonsToRemove': [
                 'pan2d', 'lasso2d', 'select2d', 'autoScale2d',

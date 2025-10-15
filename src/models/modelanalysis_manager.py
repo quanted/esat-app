@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, Signal, Slot, QThread
+from PySide6.QtCore import QObject, Signal, QThread
 
 from esat.data.analysis import ModelAnalysis
 from src.utils.esat_logger import get_logger
@@ -18,7 +18,7 @@ class Worker(QObject):
             result = self.fn(*self.args, **self.kwargs)
         except Exception as e:
             import traceback
-            self.logger.error(f"Exception in worker thread: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in worker thread: {e}\n{traceback.format_exc()}")
             result = None
         self.finished.emit(result)
 
@@ -52,7 +52,7 @@ class ModelAnalysisManager(QObject):
         self.sa = None
         self.data_handler = None
         self.analysis = None
-        self.logger.info("ModelAnalysisManager cleaned up.")
+        self.logger.info("[ModelAnalysisManager]: ModelAnalysisManager cleaned up.")
 
     def run(self):
         self.analysis = ModelAnalysis(datahandler=self.data_handler,
@@ -74,19 +74,19 @@ class ModelAnalysisManager(QObject):
         def emit_result(result):
             import logging, traceback
             self.logger = logging.getLogger(__name__)
-            self.logger.info(f"Emitting signal '{getattr(signal, 'signal', repr(signal))}' with result type: {type(result)}")
+            self.logger.info(f"[ModelAnalysisManager]: Emitting signal '{getattr(signal, 'signal', repr(signal))}' with result type: {type(result)}")
             try:
                 if hasattr(signal, 'emit'):
                     if isinstance(result, tuple):
                         signal.emit(*result)
                     else:
                         signal.emit(result)
-                    self.logger.info(f"Signal '{getattr(signal, 'signal', repr(signal))}' emitted")
+                    self.logger.info(f"[ModelAnalysisManager]: Signal '{getattr(signal, 'signal', repr(signal))}' emitted")
                 else:
                     signal(result)
-                    self.logger.info(f"Signal '{getattr(signal, 'signal', repr(signal))}' emitted")
+                    self.logger.info(f"[ModelAnalysisManager]: Signal '{getattr(signal, 'signal', repr(signal))}' emitted")
             except Exception as e:
-                self.logger.error(f"Error emitting signal: {e}\n{traceback.format_exc()}")
+                self.logger.error(f"[ModelAnalysisManager]: Error emitting signal: {e}\n{traceback.format_exc()}")
         worker.finished.connect(emit_result)
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
@@ -99,7 +99,7 @@ class ModelAnalysisManager(QObject):
         try:
             self._start_thread(self.analysis.aggregate_factors_for_plotting, self.aggregationReady)
         except Exception as e:
-            self.logger.error(f"Exception in aggregate_factors_for_plotting: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in aggregate_factors_for_plotting: {e}\n{traceback.format_exc()}")
             return
 
     def run_analysis(self):
@@ -108,12 +108,12 @@ class ModelAnalysisManager(QObject):
         try:
             self._start_thread(self.analysis.features_metrics, self.featureMetricsReady)
         except Exception as e:
-            self.logger.error(f"Exception in features_metrics: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in features_metrics: {e}\n{traceback.format_exc()}")
             return
         try:
             self._start_thread(self.analysis.calculate_statistics, self.modelStatsReady)
         except Exception as e:
-            self.logger.error(f"Exception in calculate_statistics: {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in calculate_statistics: {e}\n{traceback.format_exc()}")
             return
 
     def run_all(self):
@@ -122,14 +122,14 @@ class ModelAnalysisManager(QObject):
         try:
             self.run()
         except Exception as e:
-            self.logger.error(f"Exception in run(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run(): {e}\n{traceback.format_exc()}")
             return
         # Connect aggregationReady to the next step before running aggregation
         self.aggregationReady.connect(self.on_aggregation_finished)
         try:
             self.run_aggregation()
         except Exception as e:
-            self.logger.error(f"Exception in run_aggregation(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_aggregation(): {e}\n{traceback.format_exc()}")
             return
 
     def on_aggregation_finished(self, *args, **kwargs):
@@ -143,52 +143,52 @@ class ModelAnalysisManager(QObject):
         try:
             self.run_analysis()
         except Exception as e:
-            self.logger.error(f"Exception in run_analysis(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_analysis(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_residual_histogram()
         except Exception as e:
-            self.logger.error(f"Exception in run_residual_histogram(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_residual_histogram(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_est_obs()
         except Exception as e:
-            self.logger.error(f"Exception in run_est_obs(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_est_obs(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_est_ts()
         except Exception as e:
-            self.logger.error(f"Exception in run_est_ts(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_est_ts(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_factor_profile()
         except Exception as e:
-            self.logger.error(f"Exception in run_factor_profile(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_factor_profile(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_all_factor_profile()
         except Exception as e:
-            self.logger.error(f"Exception in run_all_factor_profile(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_all_factor_profile(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_factors_3d()
         except Exception as e:
-            self.logger.error(f"Exception in run_factors_3d(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_factors_3d(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_factor_fingerprints()
         except Exception as e:
-            self.logger.error(f"Exception in run_factor_fingerprints(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_factor_fingerprints(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_factor_contributions()
         except Exception as e:
-            self.logger.error(f"Exception in run_factor_contributions(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_factor_contributions(): {e}\n{traceback.format_exc()}")
             return
         try:
             self.run_g_space()
         except Exception as e:
-            self.logger.error(f"Exception in run_g_space(): {e}\n{traceback.format_exc()}")
+            self.logger.error(f"[ModelAnalysisManager]: Exception in run_g_space(): {e}\n{traceback.format_exc()}")
             return
 
     def run_residual_histogram(self, feature_idx: int = 0):
@@ -219,7 +219,7 @@ class ModelAnalysisManager(QObject):
         self._start_thread(fn, handle_result)
 
     def run_factor_profile(self, factor_idx: int = 1):
-        print(f"Running factor profile for factor index: {factor_idx}")
+        # print(f"Running factor profile for factor index: {factor_idx}")
         def fn():
             return self.analysis.plot_factor_profile(factor_idx=factor_idx, show=False)
         def handle_result(result):
@@ -228,7 +228,7 @@ class ModelAnalysisManager(QObject):
         self._start_thread(fn, handle_result)
 
     def run_all_factor_profile(self):
-        print(f"Running all factor profile plot")
+        # print(f"Running all factor profile plot")
         def fn():
             return self.analysis.plot_all_factors(show=False)
         def handle_result(result):

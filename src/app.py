@@ -1,5 +1,5 @@
-import os
-import sys
+from os import path
+from sys import argv, exit
 
 from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QMovie, QIcon
@@ -58,7 +58,7 @@ def do_init(app, splash):
 
         # Optimize caching
         custom_profile.setHttpCacheType(QWebEngineProfile.MemoryHttpCache)
-        custom_profile.setHttpCacheMaximumSize(100 * 1024 * 1024)  # 50MB cache
+        custom_profile.setHttpCacheMaximumSize(2 * 1024 * 1024)  # 10 MB
 
         # Disable persistent storage
         custom_profile.setPersistentStoragePath("")
@@ -79,13 +79,13 @@ def do_init(app, splash):
     splash.finish(controller)
 
 def main():
-    app = QApplication(sys.argv)
+    app = QApplication(argv)
     app.aboutToQuit.connect(cleanup)
 
     # Set application icon
-    esat_icon_path = get_resource_path(os.path.join("icons", "esat-logo.png"))
-    esat_transparent_icon = get_resource_path(os.path.join("icons", "esat-logo-transparent.png"))
-    if os.path.exists(esat_transparent_icon):
+    esat_icon_path = get_resource_path(path.join("icons", "esat-logo.png"))
+    esat_transparent_icon = get_resource_path(path.join("icons", "esat-logo-transparent.png"))
+    if path.exists(esat_transparent_icon):
         app.setWindowIcon(QIcon(esat_transparent_icon))
 
     # Load the GIF and extract the first frame as a pixmap
@@ -101,7 +101,7 @@ def main():
 
     QTimer.singleShot(100, lambda: do_init(app, splash))
 
-    sys.exit(app.exec())
+    exit(app.exec())
 
 if __name__ == "__main__":
     main()

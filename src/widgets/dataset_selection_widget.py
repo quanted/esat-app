@@ -1,16 +1,19 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QComboBox, QGroupBox, QSizePolicy
 from PySide6.QtCore import Qt, Signal
-import pandas as pd
+from pandas import Timestamp, DatetimeIndex, DataFrame
+from src.utils.esat_logger import get_logger
 
 
 class DatasetSelectionWidget(QWidget):
     dataset_selected = Signal(str)
 
-    def __init__(self, controller=None, parent=None):
+    def __init__(self, dataset_manager=None, controller=None, parent=None):
         super().__init__(parent)
         self.controller = controller
+        self.dataset_manager = dataset_manager
         self.selected_dataset = None
         self.dataset_details_labels = {}
+        self.logger = get_logger()
 
         self._setup_ui()
         self._connect_signals()
@@ -19,7 +22,7 @@ class DatasetSelectionWidget(QWidget):
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setAlignment(Qt.AlignTop)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Single group box for dataset selection and details
         self.selection_group = QGroupBox("Dataset Selection")
@@ -31,10 +34,10 @@ class DatasetSelectionWidget(QWidget):
                 font-size: 12px;
             }
         """)
-        self.selection_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
+        self.selection_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         selection_layout = QVBoxLayout(self.selection_group)
         selection_layout.setContentsMargins(8, 8, 8, 8)
-        selection_layout.setAlignment(Qt.AlignTop)
+        selection_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         # Add dropdown without label
         self.dataset_dropdown = QComboBox()
@@ -57,37 +60,48 @@ class DatasetSelectionWidget(QWidget):
 
     def _connect_signals(self):
         self.dataset_dropdown.currentIndexChanged.connect(self._on_dataset_changed)
-        dataset_manager = self._get_dataset_manager()
-        if dataset_manager:
-            dataset_manager.datasets_changed.connect(self.update_dataset_dropdown)
-            dataset_manager.dataset_loaded.connect(self.on_dataset_loaded)
-
-    def _get_dataset_manager(self):
-        if self.controller and hasattr(self.controller, "main_controller"):
-            return getattr(self.controller.main_controller, "dataset_manager", None)
-        return None
+        if self.dataset_manager:
+            self.dataset_manager.datasets_changed.connect(self.update_dataset_dropdown)
+            self.dataset_manager.selected_dataset_changed.connect(self._on_selected_dataset_changed)
+            self.dataset_manager.dataset_loaded.connect(self._on_selected_dataset_changed)
 
     def update_dataset_dropdown(self):
         self.dataset_dropdown.blockSignals(True)
         self.dataset_dropdown.clear()
-        dataset_manager = self._get_dataset_manager()
-        if dataset_manager and hasattr(dataset_manager, "get_names"):
-            names = dataset_manager.get_names()
+        if self.dataset_manager and hasattr(self.dataset_manager, "get_names"):
+            names = self.dataset_manager.get_names()
             self.dataset_dropdown.addItems(names)
             if names:
-                self.dataset_dropdown.setCurrentIndex(0)
+                # Set dropdown to match manager's selected dataset
+                idx = names.index(self.dataset_manager.selected_dataset) if self.dataset_manager.selected_dataset in names else 0
+                self.dataset_dropdown.setCurrentIndex(idx)
         self.dataset_dropdown.blockSignals(False)
         if self.dataset_dropdown.count() > 0:
-            self._on_dataset_changed(0)
+            self._on_dataset_changed(self.dataset_dropdown.currentIndex())
 
     def _on_dataset_changed(self, idx):
         name = self.dataset_dropdown.currentText()
+        if self.dataset_manager and name != self.dataset_manager.selected_dataset:
+            self.dataset_manager.selected_dataset = name
         self.selected_dataset = name
-        self.update_dataset_details(name)
         self.dataset_selected.emit(name)
+        self.logger.info(f"[DatasetSelectionWidget]: Dataset selected: {name}, index: {idx}")
+        self._update_details(name)
 
-    def update_dataset_details(self, dataset_name):
-        dataset_manager = self._get_dataset_manager()
+    def _on_selected_dataset_changed(self, name):
+        # Update dropdown selection if needed
+        names = [self.dataset_dropdown.itemText(i) for i in range(self.dataset_dropdown.count())]
+        if name in names:
+            idx = names.index(name)
+            if self.dataset_dropdown.currentIndex() != idx:
+                self.dataset_dropdown.setCurrentIndex(idx)
+        self.selected_dataset = name
+        self._update_details(name)
+
+    def _update_details(self, dataset_name):
+        dataset_manager = self.dataset_manager
+        self.logger.info(f"[DatasetSelectionWidget]: Updating details for dataset: {dataset_name}")
+        self.logger.info(f"[DatasetSelectionWidget]: Available datasets: {list(dataset_manager.loaded_datasets.keys()) if dataset_manager else 'N/A'}")
         dataset = None
         if dataset_manager:
             if dataset_name in dataset_manager.loaded_datasets.keys():
@@ -105,12 +119,12 @@ class DatasetSelectionWidget(QWidget):
         input_data = getattr(dataset, "input_data", None)
 
         # Remove rows that are empty or all NaN
-        if input_data is not None and isinstance(input_data, pd.DataFrame):
+        if input_data is not None and isinstance(input_data, DataFrame):
             input_data = input_data.dropna(how='all')
 
         if input_data is not None and hasattr(input_data, "index"):
             idx = input_data.index
-            if isinstance(idx, int) or isinstance(idx, pd.Timestamp) or isinstance(idx, pd.DatetimeIndex):
+            if isinstance(idx, int) or isinstance(idx, Timestamp) or isinstance(idx, DatetimeIndex):
                 if hasattr(idx, "min") and hasattr(idx, "max"):
                     date_range = f"{idx.min()} - {idx.max()}"
                 else:
@@ -127,7 +141,8 @@ class DatasetSelectionWidget(QWidget):
         self.dataset_details_labels["Features"].setText(str(n_features))
         self.dataset_details_labels["Date/Index Range"].setText(str(date_range))
         self.dataset_details_labels["Location"].setText(str(location))
+        self.show()
 
-    def on_dataset_loaded(self, dataset_name):
-        if dataset_name == self.dataset_dropdown.currentText():
-            self.update_dataset_details(dataset_name)
+    # def on_dataset_loaded(self, dataset_name):
+    #     if len(self.dataset_manager.loaded_datasets) > 0:
+    #         self.update_dataset_details(dataset_name)

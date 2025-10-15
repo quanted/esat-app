@@ -1,5 +1,5 @@
-import os
-import logging
+from os import environ, path, makedirs
+from logging import error
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (QMenu, QDialog, QVBoxLayout, QApplication, QInputDialog, QFileDialog, QFormLayout,
@@ -75,9 +75,9 @@ class xWebEngineView(QWebEngineView):
     def save_page(self):
         """Handle saving the current page as PNG."""
         # Get project directory as default save location
-        project_dir = os.environ.get('ESAT_PROJECT_DIR', '.')
-        plots_dir = os.path.join(project_dir, 'plots')
-        os.makedirs(plots_dir, exist_ok=True)
+        project_dir = environ.get('ESAT_PROJECT_DIR', '.')
+        plots_dir = path.join(project_dir, 'plots')
+        makedirs(plots_dir, exist_ok=True)
 
         if self.modaled:
             # For modal dialogs, show customization options first
@@ -232,7 +232,7 @@ class xWebEngineView(QWebEngineView):
                 height = int(height_input.text().strip())
 
                 # Show file save dialog
-                default_filename = os.path.join(plots_dir, "plot.png")
+                default_filename = path.join(plots_dir, "plot.png")
                 filename, _ = QFileDialog.getSaveFileName(
                     self,
                     "Save Plot As",
@@ -296,7 +296,7 @@ class xWebEngineView(QWebEngineView):
                                     with open(filename, 'wb') as f:
                                         f.write(image_data)
                                 except Exception as e:
-                                    logging.error(f"Error saving file: {e}")
+                                    error(f"Error saving file: {e}")
 
                         self.page().runJavaScript(js_get_data, handle_image_data)
 

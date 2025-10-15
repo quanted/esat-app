@@ -1,4 +1,4 @@
-import os
+from os import path, makedirs
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QLabel, QSizePolicy, QApplication, QFileDialog
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
 
@@ -55,14 +55,11 @@ class BatchAnalysisTab(QWidget):
     def update_batchloss_plot(self, html=None):
         toggle_loader(self.loss_stack, self.batchloss_movie, True)
         if html is None and self.parent:
-            dataset_name = self.parent.dataset_selection_widget.selected_dataset
+            dataset_name = self.controller.main_controller.dataset_manager.selected_dataset
             batch_analysis_dict = getattr(self.controller.main_controller, "batch_analysis_dict", {})
-            if not batch_analysis_dict or dataset_name not in batch_analysis_dict:
-                html = ""
-            else:
-                batchanalysis_manager = batch_analysis_dict[dataset_name]
-                fig = batchanalysis_manager.loss_plot
-                html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
+            batchanalysis_manager = batch_analysis_dict[dataset_name]
+            fig = batchanalysis_manager.loss_plot
+            html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         def hide_spinner(_ok):
             toggle_loader(self.loss_stack, self.batchloss_movie, False)
             try:
@@ -75,14 +72,11 @@ class BatchAnalysisTab(QWidget):
     def update_batchdist_plot(self, html=None):
         toggle_loader(self.dist_stack, self.batchdist_movie, True)
         if html is None and self.parent:
-            dataset_name = self.parent.dataset_selection_widget.selected_dataset
+            dataset_name = self.controller.main_controller.dataset_manager.selected_dataset
             batch_analysis_dict = getattr(self.controller.main_controller, "batch_analysis_dict", {})
-            if not batch_analysis_dict or dataset_name not in batch_analysis_dict:
-                html = ""
-            else:
-                batchanalysis_manager = batch_analysis_dict[dataset_name]
-                fig = batchanalysis_manager.loss_distribution_plot
-                html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
+            batchanalysis_manager = batch_analysis_dict[dataset_name]
+            fig = batchanalysis_manager.loss_distribution_plot
+            html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
         def hide_spinner(_ok):
             toggle_loader(self.dist_stack, self.batchdist_movie, False)
             try:
@@ -95,45 +89,42 @@ class BatchAnalysisTab(QWidget):
     def update_batchresiduals_plot(self, html=None):
         toggle_loader(self.residual_stack, self.batchresiduals_movie, True)
         if html is None and self.parent:
-            dataset_name = self.parent.dataset_selection_widget.selected_dataset
+            dataset_name = self.controller.main_controller.dataset_manager.selected_dataset
             batch_analysis_dict = getattr(self.controller.main_controller, "batch_analysis_dict", {})
-            if not batch_analysis_dict or dataset_name not in batch_analysis_dict:
-                html = ""
-            else:
-                feature_list = self.controller.main_controller.dataset_manager.loaded_datasets[dataset_name].input_data_df.columns.tolist() if dataset_name else None
-                self.feature_dropdown.clear()
-                self.feature_dropdown.addItems(feature_list)
-                batchanalysis_manager = batch_analysis_dict[dataset_name]
-                if feature_list:
-                    fig = batchanalysis_manager.temporal_residual_plot
-                    fig.update_layout(title=dict(text=f"Model Residual - Feature {feature_list[0]}"))
-                    html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
+            feature_list = self.controller.main_controller.dataset_manager.loaded_datasets[dataset_name].input_data_df.columns.tolist() if dataset_name else None
+            self.feature_dropdown.clear()
+            self.feature_dropdown.addItems(feature_list)
+            batchanalysis_manager = batch_analysis_dict[dataset_name]
+            if feature_list:
+                fig = batchanalysis_manager.temporal_residual_plot
+                fig.update_layout(title=dict(text=f"Model Residual - Feature {feature_list[0]}"))
+                html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
 
-                    def on_feature_changed(index):
-                        toggle_loader(self.residual_stack, self.batchresiduals_movie, True)
-                        feature = feature_list[index] if index >= 0 else None
-                        if not feature:
-                            return
-                        V_primes = batchanalysis_manager.analysis.aggregated_output
-                        input_y = batchanalysis_manager.data_handler.input_data_plot[feature]
-                        for i, trace in enumerate(fig.data):
-                            if i == 0:
-                                trace.visible = True
-                                continue
-                            model_v_prime = V_primes[i - 1]
-                            if feature in model_v_prime:
-                                model_y = model_v_prime[feature]
-                                if len(input_y) == len(model_y):
-                                    trace.y = input_y.values - model_y.values
-                                else:
-                                    trace.y = [None] * len(input_y)
+                def on_feature_changed(index):
+                    toggle_loader(self.residual_stack, self.batchresiduals_movie, True)
+                    feature = feature_list[index] if index >= 0 else None
+                    if not feature:
+                        return
+                    V_primes = batchanalysis_manager.analysis.aggregated_output
+                    input_y = batchanalysis_manager.data_handler.input_data_plot[feature]
+                    for i, trace in enumerate(fig.data):
+                        if i == 0:
                             trace.visible = True
-                            trace.name = f"Model {i} - {feature}"
-                        fig.update_layout(title=dict(text=f"Model Residual - Feature {feature}"))
-                        plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
-                        self.webviews['batchresiduals'].loadFinished.connect(hide_spinner)
-                        self.webviews['batchresiduals'].setHtml(plot_html)
-                    self.feature_dropdown.currentIndexChanged.connect(on_feature_changed)
+                            continue
+                        model_v_prime = V_primes[i - 1]
+                        if feature in model_v_prime:
+                            model_y = model_v_prime[feature]
+                            if len(input_y) == len(model_y):
+                                trace.y = input_y.values - model_y.values
+                            else:
+                                trace.y = [None] * len(input_y)
+                        trace.visible = True
+                        trace.name = f"Model {i} - {feature}"
+                    fig.update_layout(title=dict(text=f"Model Residual - Feature {feature}"))
+                    plot_html = create_optimized_plotly_html(fig, xanchor="center", x=0.5)
+                    self.webviews['batchresiduals'].loadFinished.connect(hide_spinner)
+                    self.webviews['batchresiduals'].setHtml(plot_html)
+                self.feature_dropdown.currentIndexChanged.connect(on_feature_changed)
         def hide_spinner(_ok):
             toggle_loader(self.residual_stack, self.batchresiduals_movie, False)
             try:
@@ -144,14 +135,17 @@ class BatchAnalysisTab(QWidget):
         self.set_webview_html(view_name='batchresiduals', html=html)
 
     def update_all(self):
-        self.update_batchloss_plot()
-        self.update_batchdist_plot()
-        self.update_batchresiduals_plot()
+        dataset_name = self.controller.main_controller.dataset_manager.selected_dataset
+        batch_analysis_dict = getattr(self.controller.main_controller, "batch_analysis_dict", {})
+        if dataset_name in batch_analysis_dict:
+            self.update_batchloss_plot()
+            self.update_batchdist_plot()
+            self.update_batchresiduals_plot()
 
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html:
-            self.logger.info(f"Setting HTML for webview: {view_name}")
+            self.logger.info(f"[BatchAnalysisTab]: Setting HTML for webview: {view_name}, length: {len(html)}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
             self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
@@ -169,12 +163,12 @@ class BatchAnalysisTab(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        self.logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        self.logger.info(f"[BatchAnalysisTab]: Download requested: {suggested_filename} from webview: {webview_name}")
         # Generate filename based on webview type
         project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
-        plot_dir = os.path.join(project_dir, "plots")
-        os.makedirs(plot_dir, exist_ok=True)
-        suggested_filename = os.path.join(f"{plot_dir}", f"{webview_name}.png")
+        plot_dir = path.join(project_dir, "plots")
+        makedirs(plot_dir, exist_ok=True)
+        suggested_filename = path.join(f"{plot_dir}", f"{webview_name}.png")
 
         filename, _ = QFileDialog.getSaveFileName(
             self,
@@ -186,7 +180,7 @@ class BatchAnalysisTab(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            self.logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"[BatchAnalysisTab]: Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -200,7 +194,7 @@ class BatchAnalysisTab(QWidget):
             try:
                 webview.setHtml("")  # Clear content
             except RuntimeError:
-                self.logger.warning(f"Webview {view_name} already deleted, skipping setHtml.")
+                self.logger.warning(f"[BatchAnalysisTab]: Webview {view_name} already deleted, skipping setHtml.")
                 continue
             # Do NOT call setParent(None) to avoid deletion
             webview.setParent(None)
@@ -237,9 +231,10 @@ class BatchAnalysisTab(QWidget):
 
             # Restore cached HTML
             html = self._webview_html_cache.get(view_name)
-            if view_name == "batchloss":
-                self.update_batchloss_plot(html)
-            elif view_name == "batchdist":
-                self.update_batchdist_plot(html)
-            elif view_name == "batchresiduals":
-                self.update_batchresiduals_plot(html)
+            if html is not None:
+                if view_name == "batchloss":
+                    self.update_batchloss_plot(html)
+                elif view_name == "batchdist":
+                    self.update_batchdist_plot(html)
+                elif view_name == "batchresiduals":
+                    self.update_batchresiduals_plot(html)

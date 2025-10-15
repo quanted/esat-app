@@ -11,7 +11,7 @@ class DataController:
         self.data_view.setVisible(False)
         self.first_load = True
 
-    def show_data_view(self):
+    def show_view(self):
         # Remove current main content
         if self.first_load:
             self.data_view.setVisible(True)

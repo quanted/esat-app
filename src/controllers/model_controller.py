@@ -1,3 +1,4 @@
+from PySide6.QtCore import QTimer
 from src.views.model_view import ModelView
 
 
@@ -8,7 +9,7 @@ class ModelController:
         self.model_view.setVisible(False)
         self.first_load = True
 
-    def show_data_view(self):
+    def show_view(self):
         # Remove current main content
         if self.first_load:
             self.model_view.setVisible(True)
@@ -24,4 +25,4 @@ class ModelController:
         if self.model_view not in [central_layout.itemAt(i).widget() for i in range(central_layout.count())]:
             central_layout.addWidget(self.model_view)
 
-        self.model_view.reattach_webviews()
+        QTimer.singleShot(0, self.model_view.reattach_webviews)

@@ -1,11 +1,8 @@
-import uuid
-import sys
-import re
-import numpy as np
-import multiprocessing as mp
-import threading
+from uuid import uuid4
+from numpy import ndarray
+from multiprocessing import Manager
+from threading import Thread
 from functools import partial
-from typing import List, Optional
 
 from PySide6.QtCore import QObject, Signal, QThread
 
@@ -40,7 +37,7 @@ class BatchSAManager(QObject):
 
     def __init__(self, dataset_name, parent=None):
         super().__init__(parent)
-        self.id = str(uuid.uuid4())
+        self.id = str(uuid4())
         
         self.logger = get_logger()
         
@@ -57,7 +54,7 @@ class BatchSAManager(QObject):
         self.converge_n = None
 
         self.user_progress_callback = None
-        self.manager = mp.Manager()  # Create a Manager instance
+        self.manager = Manager()  # Create a Manager instance
         self.progress_queue = self.manager.Queue()  # Use Manager's Queue
         self.listener_thread = None
         self.dataset_name = dataset_name
@@ -65,12 +62,12 @@ class BatchSAManager(QObject):
 
     def cleanup(self):
         """Cleanup resources and threads."""
-        self.logger.info(f"Cleaning up BatchSAManager - ID: {self.id}")
+        self.logger.info(f"[BatchSAManager]: Cleaning up BatchSAManager - ID: {self.id}")
         if self.listener_thread and self.listener_thread.is_alive():
             self.progress_queue.put(None)
             self.listener_thread = None
 
-    def setup(self, V: np.ndarray, U: np.ndarray, factors: int, models: int, method: str, seed: int, max_iter: int,
+    def setup(self, V: ndarray, U: ndarray, factors: int, models: int, method: str, seed: int, max_iter: int,
               init_method: str, init_norm: bool, converge_delta: float, converge_n: int,
               progress_callback: callable
               ):
@@ -87,10 +84,10 @@ class BatchSAManager(QObject):
         self.seed = seed
 
         self.user_progress_callback = progress_callback
-        self.logger.info(f"BatchSAManager setup complete - ID: {self.id}")
+        self.logger.info(f"[BatchSAManager]: BatchSAManager setup complete - ID: {self.id}")
 
     def start_batch_sa_in_thread(self):
-        self.listener_thread = threading.Thread(
+        self.listener_thread = Thread(
             target=listen_for_progress,
             args=(self.progress_queue, self.progress),
             daemon=True
@@ -110,7 +107,7 @@ class BatchSAManager(QObject):
 
     def run(self):
         try:
-            self.logger.info(f"Starting BatchSA {self.id}")
+            self.logger.info(f"[BatchSAManager]: Starting BatchSA {self.id}")
             progress_cb = partial(
                 wrapped_progress_callback,
                 self.progress_queue
@@ -122,7 +119,7 @@ class BatchSAManager(QObject):
                 converge_n=self.converge_n, verbose=False, progress_callback=progress_cb
             )
             _ = batch_sa.train()
-            self.logger.info(f"BatchSA {self.id} completed successfully.")
+            self.logger.info(f"[BatchSAManager]: BatchSA {self.id} completed successfully.")
             self.batch_sa = batch_sa
             self.finished.emit("BatchSA", batch_sa)
             self.progress_queue.put(None)

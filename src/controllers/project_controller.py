@@ -8,7 +8,7 @@ class ProjectController:
         self.project_view.setVisible(False)
         self.first_load = True
 
-    def show_project_view(self):
+    def show_view(self):
         # Remove current main content
         if self.first_load:
             self.project_view.setVisible(True)

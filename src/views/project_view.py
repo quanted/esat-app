@@ -1,5 +1,5 @@
-import os
-import pandas as pd
+from os import path
+from pandas import read_csv, read_excel, ExcelFile
 from typing import List, Optional
 
 from PySide6.QtWidgets import (
@@ -38,7 +38,7 @@ class ProjectView(QWidget):
         self.logger = get_logger()
 
         self._setup_ui()
-        self.setup_default_project() # For testing purposes, set default paths
+        # self.setup_default_project() # For testing purposes, set default paths
 
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
@@ -84,9 +84,9 @@ class ProjectView(QWidget):
     def setup_default_project(self):
         # Set default paths (ensure these variables are defined in your module)
         testing_project_name = "test_project_0"
-        testing_project = os.path.join("D:\\", "git", "esat_app", "data", "test_project")
-        testing_data = os.path.join("D:\\", "git", "esat_app", "data", "Dataset-BatonRouge-con.csv")
-        testing_uncertainty = os.path.join("D:\\", "git", "esat_app", "data", "Dataset-BatonRouge-unc.csv")
+        testing_project = path.join("D:\\", "git", "esat_app", "data", "test_project")
+        testing_data = path.join("D:\\", "git", "esat_app", "data", "Dataset-BatonRouge-con.csv")
+        testing_uncertainty = path.join("D:\\", "git", "esat_app", "data", "Dataset-BatonRouge-unc.csv")
         self.set_default_dataset_paths(testing_data, testing_uncertainty)
         self.project_name_edit.setText(testing_project_name)
         self.project_dir_edit.setText(testing_project)
@@ -236,7 +236,7 @@ class ProjectView(QWidget):
 
         # Add/remove button
         add_btn = QPushButton()
-        add_button_path = get_resource_path(os.path.join("icons", "plus-white.svg"))
+        add_button_path = get_resource_path(path.join("icons", "plus-white.svg"))
         add_btn.setIcon(QIcon(add_button_path))
         add_btn.setToolTip("Add dataset")
         add_btn.setFixedSize(32, 32)
@@ -263,14 +263,14 @@ class ProjectView(QWidget):
         loc_id_menu.triggered.connect(update_loc_id_btn_text)
 
         def update_index_col_options():
-            path = data_path_edit.text()
-            if os.path.isfile(path):
+            file_path = data_path_edit.text()
+            if path.isfile(file_path):
                 try:
-                    ext = os.path.splitext(path)[1].lower()
+                    ext = path.splitext(file_path)[1].lower()
                     if ext in [".csv", ".txt"]:
-                        df = pd.read_csv(path, nrows=0, sep=None, engine="python")
+                        df = read_csv(file_path, nrows=0, sep=None, engine="python")
                     elif ext in [".xls", ".xlsx"]:
-                        df = pd.read_excel(path, nrows=0)
+                        df = read_excel(file_path, nrows=0)
                     else:
                         QMessageBox.critical(
                             self,
@@ -294,7 +294,7 @@ class ProjectView(QWidget):
 
         def update_name():
             if not name_edit.text() and data_path_edit.text():
-                name_edit.setText(os.path.basename(data_path_edit.text().split('.')[0]))
+                name_edit.setText(path.basename(data_path_edit.text().split('.')[0]))
 
         data_path_edit.textChanged.connect(update_name)
         data_path_edit.textChanged.connect(update_index_col_options)
@@ -311,6 +311,10 @@ class ProjectView(QWidget):
 
         def add_dataset():
             """Add a new dataset to the DataManager"""
+            # Check if a project exists
+            if not self.project_dir_edit.text().strip():
+                QMessageBox.critical(self, "Error", "Please set a project directory first.")
+                return
             self.add_dataset(
                 name=name_edit.text().strip(),
                 data_file_path=data_path_edit.text().strip(),
@@ -319,7 +323,7 @@ class ProjectView(QWidget):
                 location_ids=[a.text() for a in loc_id_menu.actions() if a.isChecked()],
                 missing_value_label=missing_val_edit.text().strip()
             )
-            minus_button_path = get_resource_path(os.path.join("icons", "minus-white.svg"))
+            minus_button_path = get_resource_path(path.join("icons", "minus-white.svg"))
             add_btn.setIcon(QIcon(minus_button_path))
             add_btn.setToolTip("Remove dataset")
             add_btn.clicked.disconnect()
@@ -425,7 +429,7 @@ class ProjectView(QWidget):
             print(f"Data type: {data_type}")
             if data_type in ["xls", "xlsx"] and uncertainty_file_path is None and sheetnames is None:
                 print("Excel file with multiple sheets detected, prompting for sheet selection.")
-                excel_file = pd.ExcelFile(data_file_path)
+                excel_file = ExcelFile(data_file_path)
                 sheet_names = excel_file.sheet_names
                 print(f"Available sheets: {sheet_names}")
                 if len(sheet_names) > 1:

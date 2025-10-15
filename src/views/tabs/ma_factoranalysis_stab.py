@@ -1,4 +1,5 @@
-import os
+import warnings
+from os import path, makedirs
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QSizePolicy, QSplitter, QLabel,
                                QApplication, QComboBox, QPushButton, QDialog, QFileDialog)
 from PySide6.QtWebEngineCore import QWebEngineDownloadRequest
@@ -125,7 +126,7 @@ class FactorAnalysisSubTab(QWidget):
     def set_webview_html(self, view_name, html):
         """Set HTML and cache it for the given webview name."""
         if view_name in self.webviews.keys() and html:
-            self.logger.info(f"Setting HTML for webview: {view_name}")
+            self.logger.info(f"[FactorAnalysisSubTab]: Setting HTML for webview: {view_name}, length: {len(html)}")
             self.webviews[view_name].setHtml(html)
             self._webview_html_cache[view_name] = html
             self.setup_webview_downloads(view_name=view_name, webview=self.webviews[view_name])
@@ -135,7 +136,9 @@ class FactorAnalysisSubTab(QWidget):
         if hasattr(webview, 'page'):
             profile = webview.page().profile()
             try:
-                profile.downloadRequested.disconnect()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    profile.downloadRequested.disconnect()
             except Exception:
                 pass
             profile.downloadRequested.connect(lambda download: self.handle_download(download, view_name))
@@ -143,24 +146,24 @@ class FactorAnalysisSubTab(QWidget):
     def handle_download(self, download: QWebEngineDownloadRequest, webview_name: str):
         """Handle download requests from webview."""
         suggested_filename = download.suggestedFileName()
-        self.logger.info(f"Download requested: {suggested_filename} from webview: {webview_name}")
+        self.logger.info(f"[FactorAnalysisSubTab]: Download requested: {suggested_filename} from webview: {webview_name}")
         # Generate filename based on webview type
         model_id = getattr(self.controller.main_controller, 'current_model_idx', 0)
         project_dir = self.controller.main_controller.current_project.output_directory if self.controller and self.controller.main_controller and self.controller.main_controller.current_project else "."
-        plot_dir = os.path.join(project_dir, "plots")
-        os.makedirs(plot_dir, exist_ok=True)
+        plot_dir = path.join(project_dir, "plots")
+        makedirs(plot_dir, exist_ok=True)
         if webview_name in ['profile_plot', 'contrib_plot']:
             selected_factor = f"Factor {self.factor_dropdown.currentData()}"
             plot_type = "profile" if webview_name == 'profile_plot' else "contribution"
-            suggested_filename = os.path.join(f"{plot_dir}", f"{plot_type}_{selected_factor}_m{model_id}.png")
+            suggested_filename = path.join(f"{plot_dir}", f"{plot_type}_{selected_factor}_m{model_id}.png")
         elif webview_name == 'factor_fingerprints':
-            suggested_filename = os.path.join(f"{plot_dir}", f"factor_fingerprints_m{model_id}.png")
+            suggested_filename = path.join(f"{plot_dir}", f"factor_fingerprints_m{model_id}.png")
         elif webview_name == 'g_plot':
             x_factor = f"Factor {self.g_x_dropdown.currentData()}"
             y_factor = f"Factor {self.g_y_dropdown.currentData()}"
-            suggested_filename = os.path.join(f"{plot_dir}", f"g-space_{x_factor}_vs_{y_factor}_m{model_id}.png")
+            suggested_filename = path.join(f"{plot_dir}", f"g-space_{x_factor}_vs_{y_factor}_m{model_id}.png")
         else:
-            suggested_filename = os.path.join(f"{plot_dir}", suggested_filename or f"plot_m{model_id}.png")
+            suggested_filename = path.join(f"{plot_dir}", suggested_filename or f"plot_m{model_id}.png")
 
         filename, _ = QFileDialog.getSaveFileName(
             self,
@@ -172,7 +175,7 @@ class FactorAnalysisSubTab(QWidget):
         if filename:
             download.setDownloadFileName(filename)
             download.accept()
-            self.logger.info(f"Plot download started: {filename}")
+            self.logger.info(f"[FactorAnalysisSubTab]: Plot download started: {filename}")
         else:
             download.cancel()
 
@@ -183,7 +186,6 @@ class FactorAnalysisSubTab(QWidget):
         """
         # Detach all webviews
         for view_name, webview in self.webviews.items():
-            self.logger.info(f"Reattaching webview: {view_name}")
             webview.setHtml("")  # Clear content
             # Do NOT call setParent(None) to avoid deletion of the webview
             webview.setParent(None)
@@ -226,15 +228,17 @@ class FactorAnalysisSubTab(QWidget):
             QApplication.processEvents()
 
             # Always clear and trigger plot update
-            webview.setHtml("")
-            if view_name == 'profile_plot':
-                self.update_profile_plot(profile_html=self._webview_html_cache.get(view_name))
-            elif view_name == 'contrib_plot':
-                self.update_contrib_plot(contrib_html=self._webview_html_cache.get(view_name))
-            elif view_name == 'factor_fingerprints':
-                self.update_fingerprints_plot(html=self._webview_html_cache.get(view_name))
-            elif view_name == 'g_plot':
-                self.update_g_plot(html=self._webview_html_cache.get(view_name))
+            html = self._webview_html_cache.get(view_name)
+            if html is not None:
+                webview.setHtml("")
+                if view_name == 'profile_plot':
+                    self.update_profile_plot(profile_html=html)
+                elif view_name == 'contrib_plot':
+                    self.update_contrib_plot(contrib_html=html)
+                elif view_name == 'factor_fingerprints':
+                    self.update_fingerprints_plot(html=html)
+                elif view_name == 'g_plot':
+                    self.update_g_plot(html=html)
 
         # Reset splitter to 50/50 after all webviews are reattached
         splitter = self.findChild(QSplitter)
@@ -256,7 +260,7 @@ class FactorAnalysisSubTab(QWidget):
             try:
                 profile_fig, _ = self.controller.main_controller.selected_modelanalysis_manager.plots[f"factor_profile_{factor_idx}"]
             except Exception as e:
-                self.logger.error(f"Error retrieving profile plots: {e}")
+                self.logger.error(f"[FactorAnalysisSubTab]: Error retrieving profile plots: {e}")
                 profile_fig = None
                 profile_html = ""
 
@@ -291,7 +295,7 @@ class FactorAnalysisSubTab(QWidget):
                 _, contrib_fig = self.controller.main_controller.selected_modelanalysis_manager.plots[
                     f"factor_profile_{factor_idx}"]
             except Exception as e:
-                self.logger.error(f"Error retrieving contrib plots: {e}")
+                self.logger.error(f"[FactorAnalysisSubTab]: Error retrieving contrib plots: {e}")
 
                 contrib_fig = None
                 contrib_html = ""
@@ -315,7 +319,7 @@ class FactorAnalysisSubTab(QWidget):
             try:
                 fig = self.controller.main_controller.selected_modelanalysis_manager.plots["factor_fingerprints"]
             except Exception as e:
-                self.logger.error(f"Error retrieving fingerprint plot: {e}")
+                self.logger.error(f"[FactorAnalysisSubTab]: Error retrieving fingerprint plot: {e}")
                 fig = None
                 html = ""
 
@@ -343,7 +347,7 @@ class FactorAnalysisSubTab(QWidget):
             try:
                 fig = self.controller.main_controller.selected_modelanalysis_manager.plots[f"g_space_{factor_1_idx}_{factor_2_idx}"]
             except Exception as e:
-                self.logger.error(f"Error retrieving fingerprint plot: {e}")
+                self.logger.error(f"[FactorAnalysisSubTab]: Error retrieving fingerprint plot: {e}")
                 fig = None
                 html = ""
 
@@ -493,7 +497,7 @@ class FactorAnalysisSubTab(QWidget):
         """
         self.logger.info("[FactorAnalysisSubTab] Updating plots in Factor Analysis SubTab.")
         if self.controller.main_controller.selected_modelanalysis_manager is None:
-            self.logger.warning("No model analysis manager available.")
+            self.logger.warning("[FactorAnalysisSubTab]: No model analysis manager available.")
             return
         self.refresh_profile_plot()
         self.refresh_fingerprints_plot()

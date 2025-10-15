@@ -1,4 +1,4 @@
-import os
+from os import environ, mkdir, makedirs, path, getcwd
 
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
 from PySide6.QtCore import QThread, Signal, QTimer
@@ -37,6 +37,7 @@ class MainController(QMainWindow):
 
         self.webviews = webviews if webviews is not None else []
         self.dataset_manager = DatasetManager(self)
+
         self.modelanalysis_manager = {}
         self.selected_modelanalysis_manager = None
 
@@ -86,7 +87,7 @@ class MainController(QMainWindow):
         logger = get_logger()
         logger.info("Performing global cleanup tasks.")
         # Remove project directory from environment
-        os.environ.pop('ESAT_PROJECT_DIR', None)
+        environ.pop('ESAT_PROJECT_DIR', None)
         # Clean up batch thread
         if hasattr(MainController, "_batch_thread"):
             thread = MainController._batch_thread
@@ -150,13 +151,13 @@ class MainController(QMainWindow):
     def set_project(self, project: Project, dataset: Dataset):
         self.current_project = project
         if project is not None:
-            os.makedirs(project.output_directory, exist_ok=True)
+            makedirs(project.output_directory, exist_ok=True)
             set_log_file(project.output_directory)
         self.current_project.datasets.append(dataset)
         if project and project.output_directory:
-            os.environ['ESAT_PROJECT_DIR'] = project.output_directory
+            environ['ESAT_PROJECT_DIR'] = project.output_directory
         else:
-            os.environ.pop('ESAT_PROJECT_DIR', None)
+            environ.pop('ESAT_PROJECT_DIR', None)
 
     def load_project(self, project_path: str):
         raise NotImplementedError("Project loading not implemented yet.")
@@ -189,7 +190,7 @@ class MainController(QMainWindow):
         return batchsa_manager
 
     def handle_batch_error(self, exception):
-        self.logger.error(f"Batch processing error: {exception}", exc_info=True)
+        self.logger.error(f"[MainController]: Batch processing error: {exception}", exc_info=True)
         QMessageBox.critical(self, "Batch Error", f"An error occurred during batch processing:\n{exception}")
 
     def cancel_batch(self):
@@ -202,14 +203,14 @@ class MainController(QMainWindow):
         self.batchsa_canceled.emit()  # Emit cancellation signal
 
     def on_batchsa_finished(self):
-        project_directory = self.current_project.output_directory if self.current_project else os.getcwd()
-        if not os.path.exists(project_directory):
-            os.mkdir(project_directory)
+        project_directory = self.current_project.output_directory if self.current_project else getcwd()
+        if not path.exists(project_directory):
+            mkdir(project_directory)
         batchsa_manager = self._batch_manager
-        batch_directory = os.path.join(self.current_project.output_directory, batchsa_manager.dataset_name)
+        batch_directory = path.join(self.current_project.output_directory, batchsa_manager.dataset_name)
 
-        os.makedirs(batch_directory, exist_ok=True)
-        self.logger.info(f"Saving BatchSAManager results to {batch_directory}")
+        makedirs(batch_directory, exist_ok=True)
+        self.logger.info(f"[MainController]: Saving BatchSAManager results to {batch_directory}")
         batchsa_manager.batch_sa.save(
             batch_name=batchsa_manager.dataset_name,
             output_directory=batch_directory,
@@ -225,7 +226,7 @@ class MainController(QMainWindow):
             header=self.dataset_manager.loaded_datasets[batchsa_manager.dataset_name].features
         )
         self.completed_batches[batchsa_manager.dataset_name] = batchsa_manager
-        self.logger.info(f"BatchSAManager {batchsa_manager.id} instance saved on finish. Dataset: {batchsa_manager.dataset_name}")
+        self.logger.info(f"[MainController]: BatchSAManager {batchsa_manager.id} instance saved on finish. Dataset: {batchsa_manager.dataset_name}")
         self.batchsa_finished.emit(batchsa_manager.dataset_name)
 
         # --- Model analysis and plotting ---
@@ -236,21 +237,22 @@ class MainController(QMainWindow):
         best_model = batch_sa.best_model
         model = batch_sa.results[batch_sa.best_model]
         if not model:
-            self.logger.warning(f"No models found for batch: {dataset_name}")
+            self.logger.warning(f"[MainController]: No models found for batch: {dataset_name}")
             return
         if dataset_name not in self.modelanalysis_manager:
             self.modelanalysis_manager[dataset_name] = {}
         # Delay the model analysis call slightly to ensure readiness
-        QTimer.singleShot(200, lambda: self.run_model_analysis(dataset_name, best_model))
-        self.logger.info(f"Model analysis and plots started for batch: {dataset_name}")
+        # QTimer.singleShot(0, lambda: self.run_model_analysis(dataset_name, best_model))
+        self.logger.info(f"[MainController]: Model analysis and plots started for batch: {dataset_name}")
+        self.run_model_analysis(dataset_name, best_model)
 
     def run_batch_analysis(self, dataset_name):
         """Run batch analysis for the given dataset."""
-        if dataset_name not in self.completed_batches:
+        if dataset_name not in self.completed_batches.keys():
             raise ValueError(f"No completed batch found for dataset: {dataset_name}. Available datasets: {list(self.completed_batches.keys())}")
         batchsa = self.completed_batches[dataset_name].batch_sa
 
-        if dataset_name not in self.dataset_manager.loaded_datasets:
+        if dataset_name not in self.dataset_manager.loaded_datasets.keys():
             raise ValueError(f"Dataset '{dataset_name}' is not loaded.")
         data_handler = self.dataset_manager.loaded_datasets[dataset_name]
 
@@ -280,7 +282,7 @@ class MainController(QMainWindow):
     def on_batchanalysis_finished(self):
         batch_analysis_manager = self._batch_analysis
         self.batch_analysis_dict[batch_analysis_manager.name] = batch_analysis_manager
-        self.logger.info(f"BatchAnalysisManager instance saved on finish. Dataset: {batch_analysis_manager.name}")
+        self.logger.info(f"[MainController]: BatchAnalysisManager instance saved on finish. Dataset: {batch_analysis_manager.name}")
         self.batchanalysis_finished.emit(batch_analysis_manager.name)
 
     def run_model_analysis(self, dataset_name, model_idx=0):
@@ -301,20 +303,18 @@ class MainController(QMainWindow):
                 raise IndexError(f"Model index {model_idx} out of range for batch results.")
             sa = batch.batch_sa.results[model_idx]
 
-            self.logger.info(f"Model analysis started for dataset: {dataset_name}, model index: {model_idx}")
+            self.logger.info(f"[MainController]: Model analysis started for dataset: {dataset_name}, model index: {model_idx}")
             if dataset_name not in self.modelanalysis_manager:
                 self.modelanalysis_manager[dataset_name] = {}
             if model_idx in self.modelanalysis_manager[dataset_name]:
                 analysis_manager = self.modelanalysis_manager[dataset_name][model_idx]
-                self.logger.info("Existing ModelAnalysisManager instance found.")
+                self.logger.info("[MainController]: Existing ModelAnalysisManager instance found.")
             else:
-                self.logger.info(f"Creating ModelAnalysisManager for dataset: {dataset_name}, model_idx: {model_idx}")
-                self.logger.info(f"sa type: {type(sa)}, sa repr: {repr(sa)}")
-                self.logger.info(f"data_handler type: {type(data_handler)}, data_handler repr: {repr(data_handler)}")
+                self.logger.info(f"[MainController]: Creating ModelAnalysisManager for dataset: {dataset_name}, model_idx: {model_idx}")
                 try:
                     analysis_manager = ModelAnalysisManager(sa, data_handler, model_idx=model_idx)
                 except Exception as e:
-                    self.logger.error(f"Error instantiating ModelAnalysisManager: {e}", exc_info=True)
+                    self.logger.error(f"[MainController]: Error instantiating ModelAnalysisManager: {e}", exc_info=True)
                     raise
                 self.modelanalysis_manager[dataset_name][model_idx] = analysis_manager
                 analysis_manager.modelStatsReady.connect(self.modelstats_finished.emit)
@@ -325,16 +325,17 @@ class MainController(QMainWindow):
                 analysis_manager.gSpaceReady.connect(self.factor_gplot_finished)
                 # # ---
                 analysis_manager.factorContributionsReady.connect(self.factors_contributions_finished)
-                self.logger.info("Calling analysis_manager.run_all()...")
+                self.logger.info("[MainController]: Calling analysis_manager.run_all()...")
                 try:
                     analysis_manager.run_all()
                 except Exception as e:
-                    self.logger.error(f"Error in analysis_manager.run_all(): {e}", exc_info=True)
+                    self.logger.error(f"[MainController]: Error in analysis_manager.run_all(): {e}", exc_info=True)
                     raise
-                self.logger.info("analysis_manager.run_all() completed.")
+                self.logger.info("[MainController]: analysis_manager.run_all() completed.")
             self.selected_modelanalysis_manager = analysis_manager
-            self.logger.info(f"Model analysis completed for dataset: {dataset_name}, model index: {model_idx}")
+            self.logger.info(f"[MainController]: Model analysis completed for dataset: {dataset_name}, model index: {model_idx}")
         except Exception as e:
-            self.logger.error(f"Error in run_model_analysis: {e}", exc_info=True)
+            self.logger.error(f"[MainController]: Error in run_model_analysis: {e}", exc_info=True)
             # Optionally, show a dialog or propagate the error
         return None
+

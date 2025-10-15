@@ -1,5 +1,5 @@
-import time
-import numpy as np
+from time import monotonic
+from numpy import random
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QGroupBox, QFormLayout, QLineEdit, QComboBox,
@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QGroupBox, QFo
                                QTableWidgetItem, QMessageBox, QApplication)
 from PySide6.QtGui import QIntValidator, QDoubleValidator
 
-from src.widgets.dataset_selection_widget import DatasetSelectionWidget
 from src.widgets.hoverable_table import HoverableTableWidget, BestRowDelegate
 from src.utils import InfoDialog
 from src.utils.esat_logger import get_logger
@@ -27,8 +26,6 @@ class BatchRunTab(QWidget):
         self._progress_update_counter = {}
         self._last_update_time = {}
         self._batch_completed = False
-
-        self.dataset_selection_widget = DatasetSelectionWidget(controller=self.controller)
 
         self._setup_ui()
         self.run_button.clicked.connect(self._on_run_batch_model)
@@ -54,7 +51,7 @@ class BatchRunTab(QWidget):
         self.num_factors_edit.setPlaceholderText("e.g. 5")
         form_layout.addRow("Number of Factors", self.num_factors_edit)
         # Optional Random Seed
-        seed = np.random.randint(0, 999999)
+        seed = random.randint(0, 999999)
         self.random_seed_edit = QLineEdit()
         self.random_seed_edit.setValidator(QIntValidator(0, 999999))
         self.random_seed_edit.setPlaceholderText(str(seed))
@@ -139,7 +136,7 @@ class BatchRunTab(QWidget):
         QApplication.processEvents()
         self._set_cancel_button()
 
-        self.logger.info("Starting batch model run")
+        self.logger.info("[BatchRunTab]: Starting batch model run")
         self.basemodel_progress_table.setUpdatesEnabled(False)
         self._batch_completed = False
 
@@ -256,7 +253,8 @@ class BatchRunTab(QWidget):
         }
 
         # Get selected dataset
-        dataset = self.dataset_selection_widget.selected_dataset
+        dataset = self.controller.main_controller.dataset_manager.selected_dataset
+        self.logger.info(f"[BatchRunTab]: Selected dataset for batch model: {dataset}")
         if dataset is None:
             QMessageBox.warning(self, "No Dataset Found",
                                 "Please load and select a dataset before running a batch model.")
@@ -264,11 +262,11 @@ class BatchRunTab(QWidget):
 
         # Call run_batch on the controller
         batchsa_manager = self.controller.main_controller.run_batch(dataset, **params)
-        self.logger.info(f"BatchSAManager: {batchsa_manager}")
+        self.logger.info(f"[BatchRunTab]: BatchSAManager: {batchsa_manager}")
         if batchsa_manager:
             batchsa_manager.progress.connect(self.progress_callback)
         else:
-            self.logger.error("BatchSAManager is None!")
+            self.logger.error("[BatchRunTab]: BatchSAManager is None!")
 
         # Connect the progress signal to the callback
         batchsa_manager.progress.connect(self.progress_callback)
@@ -304,7 +302,7 @@ class BatchRunTab(QWidget):
         qrobust = progress_data["qrobust"]
         mse = progress_data["mse"]
 
-        now = time.monotonic()
+        now = monotonic()
         min_interval = 1 / 60
 
         if model_i not in self._last_update_time:
@@ -355,7 +353,7 @@ class BatchRunTab(QWidget):
             self.all_models_completed.emit()
 
     def batch_model_finish(self):
-        self.logger.info("Batch model run completed, processing results...")
+        self.logger.info("[BatchRunTab]: Batch model run completed, processing results...")
         QApplication.processEvents()  # Flush event queue
         # 1. Extract all data as text, converting Progress to "iterations/max_iterations"
         min_qtrue = float('inf')
@@ -384,8 +382,9 @@ class BatchRunTab(QWidget):
             except ValueError:
                 continue
         QTimer.singleShot(100, lambda: self.completed_batch_table(table_data, best_row))
-        dataset = self.dataset_selection_widget.selected_dataset
+        dataset = self.controller.main_controller.dataset_manager.selected_dataset
         self.parent._model_table_data[dataset] = table_data
+        self.parent.model_dropdown.blockSignals(True)
 
         if best_row >= 0:
             self.parent.model_dropdown.clear()
@@ -395,15 +394,15 @@ class BatchRunTab(QWidget):
             self.parent.model_dropdown.clear()
             self.parent.model_dropdown.setEnabled(False)
 
+        self.parent.model_dropdown.blockSignals(False)
         self.basemodel_progress_table.rowClicked.connect(self.on_row_clicked)
-        self.parent.model_dropdown.currentIndexChanged.connect(self.parent.on_model_changed)
-
+        # self.parent.model_dropdown.currentIndexChanged.connect(self.parent.on_model_changed)
         self.controller.main_controller.batchanalysis_finished.connect(self.parent._update_batchanalysis_tab)
         self._restore_run_button()
 
     def completed_batch_table(self, table_data, best_row=-1):
-        self.logger.info("Updating completed batch table with results...")
-        self.logger.info(f"Best model: {best_row+1} with Q(True) value: {table_data[best_row][2] if best_row >= 0 else 'N/A'}")
+        self.logger.info("[BatchRunTab]: Updating completed batch table with results...")
+        self.logger.info(f"[BatchRunTab]: Best model: {best_row+1} with Q(True) value: {table_data[best_row][2] if best_row >= 0 else 'N/A'}")
 
         self.overall_progress_bar.setVisible(False)
         # 2. Clear and repopulate table with QTableWidgetItems only
@@ -467,7 +466,9 @@ class BatchRunTab(QWidget):
             }
         """)
         self.run_button.clicked.disconnect()
-        self.run_button.clicked.connect(self._restore_run_button)
+        def show_cancel_popup():
+            QMessageBox.information(self, "Cancel Batch Model", "Batch model cancel has not yet been implemented")
+        self.run_button.clicked.connect(show_cancel_popup)
 
     def _restore_run_button(self):
         self.run_button.setText("Run")
