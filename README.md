@@ -2,88 +2,83 @@
   <img src="src/resources/icons/esat-logo.png" alt="ESAT Logo" width="200">
 </div>
 
-# ESAT Application
+# ESAT GUI Application
 
 ## Overview
-The ESAT application is a python based cross-platform application that allows users to create and analyze source 
-apportionment models. The application is designed to replace the EPA's PMF5 application, fully recreating the 
-functionality of PMF5 while adding new features and modern workflows. The application is built using the esat python 
-package, which provides the core functionality for source apportionment modeling, pyside6 for the GUI, scikit-learn for 
-machine learning, and pymc for Bayesian modeling.
+The ESAT application is a cross-platform graphical user interface (GUI) for source apportionment modeling, built with Python and [PySide6](https://doc.qt.io/qtforpython/). The GUI provides an interactive environment for data analysis, model creation, and visualization, aiming to modernize and extend the functionality of the EPA's PMF5 tool.
+
+The source code for the ESAT GUI is located in the `src/` directory.
 
 ## Features
-### Data Analysis
-The first step in the ESAT, and PMF5, workflow is to analyze and prepare the data. The ESAT application provides
-additional features for data analysis, including:
-* Enhanced interactive data visualization (plotly)
-* Data cleaning and preprocessing tools. 
-  * Interpolation of missing data using sklearn: 
-    * SimpleImputer (mean, median, most frequent)
-    * KNNImputer (k-nearest neighbors)
-    * IterativeImputer (iterative regressor).
-* Multi-location data analysis and visualization.
-  * Allow for single file containing location data
-  * Allow for multiple files for different locations
-  * Each location can be analyzed separately or together.
+- Interactive data visualization using Plotly
+- Data cleaning and preprocessing tools (with scikit-learn)
+- Batch model analysis and factor cataloging
+- Multi-location and dynamic source profiling workflows
+- Bayesian matrix factorization (using PyMC)
+- Factor profile search and integration with external databases
+- Modern, user-friendly interface with advanced plotting and reporting
 
-## Workflows
-In addition to the core functionality found in PMF5, the ESAT application provides several new enhanced workflows.
+## Installation
+1. **Clone the repository:**
+   ```sh
+   git clone <repo-url>
+   cd esat_app
+   ```
+2. **Install dependencies:**
+   It is recommended to use a virtual environment.
+   ```sh
+   pip install -r requirements.txt
+   ```
+   Ensure you have Python 3.9+ installed.
 
-### Uncertainty Evaluation
-Evaluation of the input uncertainty is a critical step in source apportionment modeling. ESAT will provide a workflow to
-quantify the impact the uncertainty has on the model results. This will include:
-* Uncertainty evaluation using monte carlo perturbation simulations.
+## Running the Application
+To launch the ESAT GUI:
+```sh
+python main.py
+```
+This will start the PySide6-based GUI. All main application logic and interface code is in the `src/` directory.
 
-### Batch Analysis
-In addition to the model analysis that is available in PMF5, the ESAT application will provide batch analysis to
-evaluate the factors and their contributions across multiple models. This will allow users to determine common factors,
-calculate their occurrence and variability across models, and identify trends in the data.
-* Factor Catalog
-  * A catalog of factors that can be used to compare and analyze factors across models, where factors are clustered by correlation.
-  * Allows users to identify common factors across models and evaluate their contributions.
+## Directory Structure
+- `src/` — Main source code for the ESAT GUI application
+- `data/` — Example datasets
+- `requirements.txt` — Python dependencies
+- `DEVOPTIONS.md` — Advanced developer and workflow documentation
 
-### Factor Count Analysis
-A critical step in source apportionment modeling is determining the number of factors to extract from the data. Often 
-this is done by trial and error, but the ESAT application will provide a more systematic approach to factor count analysis.
-* Multi-criteria evalution of the number of factors to use by combining information theory, cross-validation and stability metrics.
-* Evaluate batch model error, the Bayesian Information Criterion (BIC), Akaike Information Criterion (AIC), and of the cataloged clusters.
+## Documentation & Advanced Usage
+For detailed workflow descriptions, developer options, and advanced features, see [DEVOPTIONS.md](DEVOPTIONS.md).
 
-### Multi-Location Analysis
-Multi-location analysis allows users to analyze data from multiple locations simultaneously, providing a more 
-comprehensive understanding of source apportionment across different locations.
-* Develop batches of models for each location all with their own catalog of factors.
-  * Allows users to analyze data from multiple locations simultaneously.
-* Compare the catalog of factors across locations.
-  * Allows users to identify common factors across locations and evaluate how the change.
+## License
+See [LICENSE](LICENSE) for license information.
 
-### Dynamic Source Profiling
-In matrix factorization, the source profiles are assumed to be static. However, in reality, the source profiles can 
-change over time. Source profiles can change in time, new sources can emerge, and existing sources can disappear. 
-Capturing this dynamic nature of sources is critical for accurate source apportionment modeling.
-* Rolling window batch modelling
-  * A fixed window of data is used to create a batch, then the window is shifted forward in time and a new batch is created. These models can then be evaluated for source changes.
-  * A possible approach: An initial batch is created, in the next window 3 new independent batches are created for k factors +/- 1. Each of these batches are evaluated to determine the best fit for the new data.
+## Building the Executable (Windows)
 
-### Bayesian Source Apportionment
-Bayesian matrix factorization (BNMF) is a powerful approach to source apportionment modeling that allows for uncertainty to be 
-integrated directly into the model. While more complex than traditional matrix factorization approaches, a hybrid modeling
-approach can be used to combine the strengths of both algorithms. Running a batch of models then using the results to 
-initialize a Bayesian model we can provide efficient and accuracy BNMF model. Benefits of BNMF:
-* Uncertainty quantification and probabilistic modeling.
-* Incorporation of prior knowledge, easily customized for model/source constraints.
-* Use of prior distributions to inform the model, allowing for continuous learning, and adaptation to new data.
+You can build a standalone Windows executable for the ESAT GUI using [PyInstaller](https://pyinstaller.org/).
 
-### Factor Profile Search
-Evaluating the outputs of a source apportionment model can be challenging, especially when trying to identify specific sources. 
-To assist with this, the ESAT application will provide a factor profile search feature that allows users to compare factor
-profiles to those in a database of known sources, such as the EPA SPECIATE database.
-* Integration of SPECIATE database for factor profile comparison/search/labeling.
-* Enhance the database by converting the SPECIATE database to use vectorized embeddings, allowing for rapid similarity search and clustering.
-* Allow for users to develop their own factor profile databases.
+### 1. Install PyInstaller
+```sh
+pip install pyinstaller
+```
 
-### Live Data Integration
-By combining several of these new features, the ESAT application would be capable of providing live data integration 
-functionality. Automating the factor count analysis (which will have to include a decision criteria), factor cataloging, 
-profile search, and BNMF modeling would allow for real-time source apportionment modeling.
-* Develop automated workflow for the EPA's AirNow data.
-* Develop dashboard for visualization and analysis of source apportionment results for the live-data.
+### 2. Build the Executable
+Run the following command from the project root:
+```sh
+pyinstaller --clean esat.spec
+```
+
+This command uses the `esat.spec` file, which is a PyInstaller specification script tailored for the ESAT application. The `esat.spec` file:
+- Sets the entry point to `src/app.py` (the main GUI application).
+- Includes all necessary source code from the `src/` directory and example datasets from `data/`.
+- Adds required resources (such as icons and styles) to the build, ensuring the GUI displays correctly.
+- Sets the application icon (located in `src/resources/icons/esat-logo.ico`).
+- Configures PyInstaller to build a single-folder distribution in `dist/ESAT/`.
+- Applies any additional PyInstaller options needed for ESAT to run as a standalone Windows executable.
+
+You can customize the build by editing `esat.spec` to add or remove data files, change the entry script, or adjust PyInstaller options as needed. For more details, see the comments inside `esat.spec` and the [PyInstaller documentation](https://pyinstaller.org/en/stable/spec-files.html).
+
+### 3. Locate the Executable
+The built executable and dependencies will be in the `dist/ESAT/` directory.
+
+### 4. Notes
+- You may need to adjust `--add-data` paths for your environment (use `;` as a separator on Windows).
+- If you use additional data files or resources, add them with more `--add-data` options.
+- For advanced options or troubleshooting, see the [PyInstaller documentation](https://pyinstaller.org/en/stable/).
